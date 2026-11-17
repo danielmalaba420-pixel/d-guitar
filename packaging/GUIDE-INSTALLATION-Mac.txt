@@ -1,4 +1,4 @@
-D-GUITAR 1.2.0 — Guitares électriques et acoustique
+D-GUITAR 1.3.0 — Guitares électriques et acoustique
 Guide d'installation et de prise en main (Mac)
 Créé et développé par Daniel Malaba — Studio Danova
 =====================================================
@@ -45,9 +45,10 @@ D-GUITAR est un INSTRUMENT (comme un synthé), pas un effet.
   CLEAN    — corde modélisée : son clair, cristallin, trémolo
   DIVE     — vraie guitare électrique dans l'ampli saturé ; la molette MODULATION
              fait trembler la note (vibrato de guitariste) ; la molette PITCH plonge (levier)
-  CRY      — guitare qui pleure : la note chante sans s'éteindre, vibrato de chanteur,
-             molette MODULATION = vibrato large ; jouez fort, la note monte comme un bend ;
-             WAH = le « ouah » à chaque attaque
+  CRY      — guitare qui pleure : son rond et chantant, la note tient sans s'éteindre,
+             le vibrato arrive tout seul, la note glisse vers le bas quand on la lâche ;
+             molette MODULATION = plaintes (bends répétés) ; notes liées = glissés ;
+             TONE ouvre le son, AMP DRIVE le salit
   ACOUSTIC — vraies guitares acoustiques : Folk (acier, médiator), Arpèges (acier, doigts),
              Nylon ; potards BODY, TONE, BRIGHT ; la molette MODULATION étouffe (paume)
 

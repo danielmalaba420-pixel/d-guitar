@@ -70,7 +70,7 @@ public:
     void prepare (double sampleRate) { sr = sampleRate; reset(); }
     void reset()
     {
-        held.clear(); queue.clear(); started = false; stepIdx = -1; walkIdx = 0;
+        held.clear(); queue.clear(); started = false; stepIdx = -1; walkIdx = 0; pendingStep = -1;
         for (auto& c : ringing) c = -1;
         current.store (-1);
     }
@@ -94,6 +94,7 @@ public:
     void noteOn (int note, float vel, Sink& s)
     {
         for (auto& h : held) if (h.note == note) return;
+        sinceChange = 0;
         const bool first = held.empty();
         held.push_back ({ note, vel });
         revoice (s);
@@ -116,7 +117,7 @@ public:
     {
         held.erase (std::remove_if (held.begin(), held.end(), [note] (const Held& h) { return h.note == note; }), held.end());
         if (held.empty()) releaseCountdown = (int) (0.035 * sr);   // court délai : on peut enchaîner les accords sans couper
-        else revoice (s);
+        else { sinceChange = 0; revoice (s); }
     }
 
     void allOff (Sink& s)
@@ -142,6 +143,12 @@ public:
             else ++i;
         }
 
+        sinceChange += n;
+        if (pendingStep >= 0 && sinceChange >= settle())
+        {   // l'accord est complet : on joue le pas retenu
+            const int ps = pendingStep; pendingStep = -1;
+            if (! held.empty()) playStep (steps[(size_t) ps], s);
+        }
         if (releaseCountdown >= 0)
         {
             releaseCountdown -= n;
@@ -168,7 +175,10 @@ public:
             const int si = ((idx % (int) steps.size()) + (int) steps.size()) % (int) steps.size();
             if (si == 0) walkIdx = 0;
             current.store (si);
-            playStep (steps[(size_t) si], s);
+            // les doigts arrivent sur les touches à des moments un peu différents : tant que l'accord
+            // n'est pas complet (< 30 ms), on attend, sinon on entend des notes fausses (« notes d'ornement »)
+            if (sinceChange < settle()) pendingStep = si;
+            else playStep (steps[(size_t) si], s);
         }
     }
 
@@ -394,6 +404,8 @@ private:
 
     double sr = 48000.0, tempo = 100.0, beat = 0.0, hostPpq = 0.0;
     bool hostPlaying = false, started = false, minor = false;
+    int sinceChange = 1 << 30, pendingStep = -1;
+    int settle() const { return (int) (0.03 * sr); }
     int pat = 0, div = 2, stepIdx = -1, startDelay = 0, releaseCountdown = -1, bassString = 0, walkIdx = 0;
     float vel = 0.8f;
     uint32_t rng = 0x2468aceu;

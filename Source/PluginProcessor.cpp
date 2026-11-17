@@ -166,6 +166,7 @@ void DGuitarProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     applySettings();
     engine.setSamples (bank.audioFetch (wantedSet()));
     engineSamples.store (engine.usingSamples());
+    engine.releaseNoises = ! player.active();
     {
         const int pat = getPattern();
         if (pat != player.pattern())

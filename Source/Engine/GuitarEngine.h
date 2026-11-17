@@ -335,6 +335,7 @@ struct StringVoice
     // lecture d'échantillon
     const SampleZone* zone = nullptr;
     double spos = 0.0, rate = 1.0;
+    float rt[4] = { 0, 0, 0, 0 }, rtA = 1.0f;   // filtre rond qui suit la note (CRY)
     float damp = 1.0f, sgain = 1.0f, relEnv = 1.0f, relK = 1.0f, susRef = 0.0f, susG = 1.0f;
     bool  oneShot = false;      // bruit de relâchement : joué tel quel
     bool active = false, gate = false, releasing = false, held = false;
@@ -365,7 +366,7 @@ struct StringVoice
     void init() { R.init (kLine); Lc.init (kLine); }
     void clear()
     {
-        zone = nullptr; spos = 0; relEnv = 1; damp = 1; susG = 1; oneShot = false; R.clear(); Lc.clear(); lp1 = 0; ax1[0] = ax1[1] = ay1[0] = ay1[1] = 0; prevA = prevB = 0; env = 0; excN = excLen = 0; sq.reset();
+        zone = nullptr; spos = 0; relEnv = 1; damp = 1; rt[0] = rt[1] = rt[2] = rt[3] = 0; rtA = 1; susG = 1; oneShot = false; R.clear(); Lc.clear(); lp1 = 0; ax1[0] = ax1[1] = ay1[0] = ay1[1] = 0; prevA = prevB = 0; env = 0; excN = excLen = 0; sq.reset();
     }
 };
 
@@ -525,8 +526,11 @@ private:
     struct Pending { int note; float vel; int delay; };
 
     float sr = 48000.0f;
-    float hexK = 0.3f;
+    float hexK = 0.3f, roundK = 2.0f;
     const SampleSet* samples = nullptr;
+public:
+    bool releaseNoises = true;   // bruits de doigts au relâchement (coupés pendant les arpèges/grattements)
+private:
     int rrCount = 0;
     Biquad acLow[2], acHigh[2], sideTone[2];
     OnePole palmLp[2];
@@ -625,6 +629,7 @@ private:
         toneHi.highShelf (2600.0f, tn * 14.0f, sr);
 
         wahAmt = clampf (st.wah, 0, 1);
+        roundK = lerpf (1.15f, 3.2f, clampf (st.tone, 0.0f, 1.0f));
         brightK = 0.6f + 0.9f * wahAmt;
         if (v.acoustic)
         {
@@ -677,6 +682,11 @@ private:
     {
         v.gate = false; v.releasing = true; v.held = false;
         v.releaseT = V->releaseMs * 0.001f;
+        if (V->falloff > 0.0f && ! v.oneShot)
+        {   // fin de phrase « qui pleure » : la note glisse vers le bas en s'éteignant
+            v.tgtSemi -= V->falloff;
+            v.glideK = glideCoef (V->releaseMs * 0.6f);
+        }
         if (v.zone != nullptr && ! v.oneShot) releaseNoise (v);
     }
 
@@ -728,7 +738,7 @@ private:
                 for (auto& v : voices)
                     if (v.active && v.gate)
                     {
-                        if (v.zone != nullptr && std::abs (note - v.note) > 4) break;   // grand saut : on rejoue une vraie note
+                        if (v.zone != nullptr && std::abs (note - v.note) > 7) break;   // grand saut : on rejoue une vraie note
                         v.note = note; v.tgtSemi = (float) note; v.glideK = glideCoef (V->glideMs);
                         if (v.zone != nullptr) return;   // glissé sur la même corde (slide)
                         // petit « hammer-on » : la corde est ré-énergisée en douceur
@@ -789,7 +799,7 @@ private:
     // bruit de relâchement (doigts qui quittent les cordes) : guitare acoustique
     void releaseNoise (const StringVoice& from)
     {
-        if (! usingSamples() || V->samples != 2) return;
+        if (! usingSamples() || V->samples != 2 || ! releaseNoises) return;
         const SampleZone* z = samples->pick (from.note, 1.0f, 0, 1);
         if (z == nullptr) return;
         StringVoice* v = allocVoice();
@@ -798,7 +808,7 @@ private:
         v->active = true; v->gate = false; v->releasing = false; v->held = false;
         v->note = -1; v->age = ++ageCounter; v->vel = from.vel;
         v->zone = z; v->oneShot = true; v->spos = 0.0;
-        v->sgain = 0.35f * (0.4f + 0.6f * from.vel) * kAcSampleGain;
+        v->sgain = 0.22f * (0.4f + 0.6f * from.vel) * kAcSampleGain;
         v->curSemi = v->tgtSemi = (float) z->root;
         v->rate = (double) samples->sr / sr;
     }
@@ -1009,7 +1019,14 @@ private:
                 if (std::fabs (v.tgtSemi - v.curSemi) < 1.0e-4f) v.curSemi = v.tgtSemi;
             }
             if ((v.hop++ & 15) == 0)
+            {
                 v.rate = std::exp2 ((v.curSemi + pitchOffsetSemi - (float) z.root) / 12.0f) * (double) samples->sr / sr;
+                if (V->roundTone)
+                {
+                    const float f0 = 440.0f * std::exp2 ((v.curSemi + pitchOffsetSemi - 69.0f) / 12.0f);
+                    v.rtA = 1.0f - std::exp (-2.0f * kPi * std::min (f0 * roundK, 0.45f * sr) / sr);
+                }
+            }
         }
         const bool loops = V->sustainer > 0.0f && z.loopEnd > 0 && ! v.oneShot;
         if (loops && v.spos >= z.loopEnd) v.spos -= (double) (z.loopEnd - z.loopStart);
@@ -1061,6 +1078,13 @@ private:
             v.swellT += 1.0f;
         }
         ++v.life;
+        if (V->roundTone && ! v.oneShot)
+        {   // 4 pôles accordés sur la note : il reste surtout la fondamentale, comme une voix qui chante
+            float m = 0.5f * (L + R);
+            for (int k = 0; k < 4; ++k) { v.rt[k] += (m - v.rt[k]) * v.rtA; m = v.rt[k]; }
+            side = 0.0f;
+            return m * g * 1.6f;
+        }
         side = 0.5f * (L - R) * g;
         return 0.5f * (L + R) * g;
     }
@@ -1098,7 +1122,7 @@ private:
                 float cents = manual ? modS * v.vibCents : 0.0f;
                 if (v.autoVibCents > 0.0f)
                 {   // vibrato de chanteur : la note d'abord droite, puis le vibrato s'installe
-                    const float t = clampf ((noteAge - v.autoVibDelay) / 0.5f, 0.0f, 1.0f);
+                    const float t = clampf ((noteAge - v.autoVibDelay) / v.autoVibRise, 0.0f, 1.0f);
                     cents += v.autoVibCents * t * t * (3.0f - 2.0f * t);
                 }
                 const float wave = v.vibUp ? 0.5f - 0.5f * std::cos (vibPh) : std::sin (vibPh);   // guitariste : la note monte et revient
@@ -1276,6 +1300,11 @@ private:
                 const float wr = chR.tap (baseB + dep * std::sin (chPh2 + 1.7f));
                 sigL[i] = x * (1.0f - 0.3f * chMix) + chMix * wl + sideBuf[i];
                 sigR[i] = x * (1.0f - 0.3f * chMix) + chMix * wr - sideBuf[i];
+                if (v.wide > 0.0f)
+                {   // guitare doublée : la droite joue la même chose un peu plus tard, légèrement « autre main »
+                    const float dbl = chR.tap (0.0135f * sr + 0.00035f * sr * std::sin (chPh1 * 0.61f + 0.4f));
+                    sigR[i] = sigR[i] * (1.0f - v.wide) + dbl * v.wide * 0.97f;
+                }
             }
         }
 

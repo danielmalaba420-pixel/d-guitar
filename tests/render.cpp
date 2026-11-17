@@ -76,12 +76,19 @@ int main (int argc, char** argv)
             for (int c = 0; c < 4; ++c)
             {
                 const double t0 = 0.05 + (r * 4 + c) * bar;
-                for (int k = 0; k < 3; ++k) { on (t0, ch[c][k], 0.82f); off (t0 + bar - 0.02, ch[c][k]); }
+                for (int k = 0; k < 3; ++k) { const double sg = std::getenv ("STAG") ? 0.012 * k : 0.0; on (t0 + sg, ch[c][k], 0.82f); off (t0 + bar - 0.02, ch[c][k]); }
             }
     }
     else if (sc == "held")   // une note tenue 8 s, molette à fond de 3 à 6 s (vibrato)
     {
         on (0.1, 64, 0.9f); for (int i = 0; i <= 20; ++i) mod (3.0 + i * 0.05, i / 20.0f); mod (6.0, 0.0f); off (8.5, 64);
+    }
+    else if (sc == "cry")    // phrase calquée sur les références de Dan : note tenue puis vibrato qui arrive, glissé final,
+    {                        // notes liées qui glissent, plaintes à la molette (bends répétés), longue note
+        on (0.3, 63, 0.75f); off (3.6, 63);
+        on (4.3, 64, 0.8f); on (4.75, 67, 0.8f); off (4.8, 64); on (5.25, 69, 0.85f); off (5.3, 67);
+        for (int i = 0; i <= 10; ++i) mod (6.0 + i * 0.03, i / 10.0f); mod (7.8, 0.0f); off (8.4, 69);
+        on (8.9, 71, 0.9f); on (11.4, 68, 0.8f); off (11.45, 71); off (14.0, 68);
     }
     else if (sc == "lead")   // phrase de solo : notes liées, bend + vibrato, note qui chante longtemps
     {
@@ -147,7 +154,7 @@ int main (int argc, char** argv)
     Player pl; pl.prepare (sr);
     struct S : Player::Sink { Engine* e; double* t = nullptr; void strike (int n, float v) override { if (std::getenv ("TRACE")) std::printf ("%.3f %d %.2f\n", *t, n, v); e->strike (n, v); } void release (int n) override { e->noteOff (n); } } sk; sk.e = &e; double tnow = 0; sk.t = &tnow;
     const int patN = std::getenv ("PAT") ? std::atoi (std::getenv ("PAT")) : 0;
-    pl.setPattern (patN); pl.setTempo (std::getenv ("BPM") ? std::atof (std::getenv ("BPM")) : 90.0);
+    pl.setPattern (patN); e.releaseNoises = patN == 0; pl.setTempo (std::getenv ("BPM") ? std::atof (std::getenv ("BPM")) : 90.0);
     size_t ei = 0; int pos = 0; const int blk = patN > 0 ? 32 : 128;
     while (pos < total)
     {
