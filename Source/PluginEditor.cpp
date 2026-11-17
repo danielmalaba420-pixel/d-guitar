@@ -10,12 +10,16 @@ const Colour kAccent (0xffff8a3d);
 const Colour kLine (0xff3a2f26);
 const Colour kText (0xffd9cfc4);
 const Colour kDim (0xff8f8478);
+const char* const kLabelsAc[3] = { "BODY", "TONE", "BRIGHT" };
 const char* const kLabels[7] = { "AMP DRIVE", "TONE", "WAH", "DELAY", "CHORUS", "REVERB", "VOLUME" };
 const Rectangle<float> kStage (160.0f, 242.0f, 1280.0f, 425.0f);
 const Rectangle<float> kPitchR (55.0f, 312.0f, 70.0f, 236.0f);
 const Rectangle<float> kModR (1475.0f, 312.0f, 70.0f, 236.0f);
 const Rectangle<float> kPrevBtn (66.0f, 88.0f, 28.0f, 22.0f);
 const Rectangle<float> kNextBtn (394.0f, 88.0f, 28.0f, 22.0f);
+const Rectangle<float> kPatPanel (176.0f, 594.0f, 640.0f, 60.0f);
+const Rectangle<float> kPatPrev (190.0f, 620.0f, 26.0f, 24.0f);
+const Rectangle<float> kPatNext (458.0f, 620.0f, 26.0f, 24.0f);
 const int kOpen[6] = { 40, 45, 50, 55, 59, 64 };
 
 Image loadImg (const void* d, int n) { return ImageFileFormat::loadFrom (d, (size_t) n); }
@@ -40,6 +44,7 @@ DGuitarEditor::DGuitarEditor (DGuitarProcessor& p) : AudioProcessorEditor (&p), 
     guitars[0] = { "CLEAN", loadImg (BinaryData::dg_clean_png, BinaryData::dg_clean_pngSize), {}, 1517, 534, 900, 60, 14, 260, 270.4027f, -0.0027f, 10.9005f, 0.0069f, 238, 1225 };
     guitars[1] = { "DIVE",  loadImg (BinaryData::dg_dive_png,  BinaryData::dg_dive_pngSize),  {}, 1517, 534, 900, 60, 14, 260, 270.4027f, -0.0027f, 10.9005f, 0.0069f, 238, 1225 };
     guitars[2] = { "CRY",   loadImg (BinaryData::dg_cry_png,   BinaryData::dg_cry_pngSize),   {}, 1532, 540, 880, 70, 16, 275, 270.1637f, -0.000654f, 11.2375f, 0.0067151f, 262, 1245 };
+    guitars[3] = { "ACOUSTIC", loadImg (BinaryData::dg_acoustic_png, BinaryData::dg_acoustic_pngSize), {}, 1536, 507, 900, 60, 24, 330, 252.0f, -0.003f, 10.8f, 0.00444f, 285, 1230 };
     for (auto& g : guitars)
     {
         const Image small = g.img.rescaled (g.img.getWidth() / 4, g.img.getHeight() / 4, Graphics::highResamplingQuality);
@@ -65,7 +70,7 @@ Font DGuitarEditor::font (float h, int weight) const
 
 Rectangle<float> DGuitarEditor::slotRect (int i)
 {
-    const float w = (1512.0f - 2.0f * 16.0f) / 3.0f;
+    const float w = (1512.0f - 3.0f * 16.0f) / 4.0f;
     return { 44.0f + (float) i * (w + 16.0f), 134.0f, w, 96.0f };
 }
 
@@ -131,8 +136,8 @@ void DGuitarEditor::buildStatic (float ps)
     g.fillRect (kStage.getX(), kStage.getBottom() - 56.0f, kStage.getWidth(), 56.0f);
     g.setColour (Colour (0xff2f2720));
     g.drawRoundedRectangle (kStage, 14.0f, 1.0f);
-    spaced (g, "CLIQUE OU GLISSE SUR LES CORDES", { kStage.getX(), kStage.getBottom() - 28.0f, kStage.getWidth(), 14.0f },
-            Justification::centred, font (11.0f, 3).withExtraKerningFactor (0.2f), Colour (0xff5d544b));
+    spaced (g, "CLIQUE OU GLISSE SUR LES CORDES", { kStage.getRight() - 520.0f, kStage.getBottom() - 28.0f, 496.0f, 14.0f },
+            Justification::right, font (11.0f, 3).withExtraKerningFactor (0.2f), Colour (0xff5d544b));
 
     // molettes : logements + noms
     for (auto r : { kPitchR, kModR })
@@ -145,9 +150,6 @@ void DGuitarEditor::buildStatic (float ps)
     spaced (g, "PITCH BEND", { kPitchR.getX() - 15.0f, kPitchR.getBottom() + 12.0f, 100.0f, 18.0f }, Justification::centred, font (14.0f, 1).withExtraKerningFactor (0.16f), kText);
     spaced (g, "MODULATION", { kModR.getX() - 15.0f, kModR.getBottom() + 12.0f, 100.0f, 18.0f }, Justification::centred, font (14.0f, 1).withExtraKerningFactor (0.16f), kText);
 
-    // potards : étiquettes
-    for (int i = 0; i < 7; ++i)
-        spaced (g, kLabels[i], knobArea (i).withHeight (18.0f), Justification::centred, font (15.0f, 1).withExtraKerningFactor (0.18f), Colour (0xffc9a98c));
 
     // pied
     spaced (g, "Danova", { 44.0f, 836.0f, 140.0f, 40.0f }, Justification::left, font (28.0f, 1).withExtraKerningFactor (0.04f), Colour (0xffc9622a));
@@ -156,7 +158,7 @@ void DGuitarEditor::buildStatic (float ps)
     g.setGradientFill (ColourGradient (Colour (0xffc9622a), 1410.0f, 856.0f, Colour (0x00c9622a), 960.0f, 856.0f, false));
     g.fillRect (960.0f, 856.0f, 450.0f, 1.0f);
     spaced (g, "D-GUITAR", { 640.0f, 836.0f, 320.0f, 40.0f }, Justification::centred, font (32.0f, 2).withExtraKerningFactor (0.34f), Colour (0xffe9dfd3));
-    spaced (g, String::fromUTF8 ("AU \xc2\xb7 VST3 \xc2\xb7 v1.0"), { 1340.0f, 836.0f, 216.0f, 40.0f }, Justification::right, font (14.0f, 1).withExtraKerningFactor (0.18f), kDim);
+    spaced (g, String::fromUTF8 ("AU \xc2\xb7 VST3 \xc2\xb7 v1.1"), { 1340.0f, 836.0f, 216.0f, 40.0f }, Justification::right, font (14.0f, 1).withExtraKerningFactor (0.18f), kDim);
 }
 
 //==============================================================================
@@ -277,6 +279,50 @@ void DGuitarEditor::drawScreen (Graphics& g)
 }
 
 //==============================================================================
+void DGuitarEditor::drawPattern (Graphics& g)
+{
+    const int pat = proc.getPattern();
+    g.setColour (Colour (0xd8120e0b));
+    g.fillRoundedRectangle (kPatPanel, 9.0f);
+    g.setColour (pat > 0 ? kAccent.withAlpha (0.55f) : kLine);
+    g.drawRoundedRectangle (kPatPanel, 9.0f, 1.0f);
+    spaced (g, "RYTHME", { 192.0f, 600.0f, 120.0f, 14.0f }, Justification::left, font (11.0f, 3).withExtraKerningFactor (0.2f), kDim);
+    spaced (g, pat > 0 ? "TIENS UN ACCORD" : "JEU NOTE PAR NOTE", { 300.0f, 600.0f, 184.0f, 14.0f }, Justification::right,
+            font (10.0f, 3).withExtraKerningFactor (0.12f), Colour (0xff6f655b));
+    for (auto r : { kPatPrev, kPatNext })
+    {
+        g.setColour (kLine);
+        g.drawRoundedRectangle (r, 4.0f, 1.0f);
+    }
+    spaced (g, String::fromUTF8 ("\xe2\x80\xb9"), kPatPrev, Justification::centred, font (18.0f, 1), Colour (0xffb7ab9d));
+    spaced (g, String::fromUTF8 ("\xe2\x80\xba"), kPatNext, Justification::centred, font (18.0f, 1), Colour (0xffb7ab9d));
+    const String name = pat > 0 ? String (dguitar::patterns()[(size_t) pat - 1].name) : String ("OFF");
+    spaced (g, name, { 218.0f, 620.0f, 238.0f, 24.0f }, Justification::centred, font (15.0f, 2).withExtraKerningFactor (0.1f),
+            pat > 0 ? kAccent : Colour (0xffb7ab9d));
+
+    // grille des pas : hauteur = force du coup, le pas joué s'allume
+    const int n = proc.patternSteps();
+    const float x0 = 500.0f, x1 = 800.0f;
+    if (pat > 0 && n > 0)
+    {
+        const int cur = proc.patternCurrent();
+        const float cw = (x1 - x0) / (float) n;
+        for (int i = 0; i < n; ++i)
+        {
+            const int w = proc.patternWeight (i);
+            const float h = w == 0 ? 3.0f : (w == 1 ? 10.0f : (w == 2 ? 18.0f : 26.0f));
+            const auto r = Rectangle<float> (x0 + (float) i * cw + cw * 0.18f, 640.0f - h, cw * 0.64f, h);
+            Colour c = w == 0 ? Colour (0xff3a2f26) : Colour (0xff8a6f58);
+            if (i == cur) c = w == 0 ? Colour (0xff6a5444) : kAccent;
+            g.setColour (c);
+            g.fillRoundedRectangle (r, 1.5f);
+        }
+    }
+    else
+        spaced (g, "CHOISIS UN ARPEGE OU UN GRATTEMENT", { x0, 616.0f, x1 - x0, 24.0f }, Justification::centred,
+                font (10.0f, 3).withExtraKerningFactor (0.12f), Colour (0xff6f655b));
+}
+
 void DGuitarEditor::drawStage (Graphics& g)
 {
     const int gi = proc.getGuitar();
@@ -331,7 +377,7 @@ void DGuitarEditor::paint (Graphics& g)
 
     // choix des guitares
     const int cur = proc.getGuitar();
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 4; ++i)
     {
         const auto r = slotRect (i);
         const bool on = i == cur;
@@ -356,6 +402,7 @@ void DGuitarEditor::paint (Graphics& g)
     }
 
     drawStage (g);
+    drawPattern (g);
 
     drawWheel (g, kPitchR, 0.5f + 0.5f * proc.effectivePitch(), true);
     drawWheel (g, kModR, proc.effectiveMod(), false);
@@ -363,6 +410,9 @@ void DGuitarEditor::paint (Graphics& g)
     for (int i = 0; i < 7; ++i)
     {
         const auto a = knobArea (i);
+        const char* lab = kLabels[i];
+        if (cur == 3 && i < 3) lab = kLabelsAc[i];
+        spaced (g, lab, a.withHeight (18.0f), Justification::centred, font (15.0f, 1).withExtraKerningFactor (0.18f), Colour (0xffc9a98c));
         drawKnob (g, i, a.getCentreX(), a.getY() + 18.0f + 6.0f + 50.0f);
     }
 }
@@ -457,10 +507,13 @@ void DGuitarEditor::mouseDown (const MouseEvent& e)
 {
     const auto p = toDesign (e.position);
     drag = Drag::none;
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 4; ++i)
         if (slotRect (i).contains (p)) { if (i != proc.getGuitar()) proc.selectGuitar (i); return; }
     if (kPrevBtn.expanded (4.0f).contains (p)) { proc.selectPreset (proc.getPreset() - 1); return; }
     if (kNextBtn.expanded (4.0f).contains (p)) { proc.selectPreset (proc.getPreset() + 1); return; }
+    if (kPatPrev.expanded (4.0f).contains (p)) { proc.setPattern (proc.getPattern() - 1); return; }
+    if (kPatNext.expanded (4.0f).contains (p)) { proc.setPattern (proc.getPattern() + 1); return; }
+    if (kPatPanel.contains (p)) return;
 
     if (kPitchR.expanded (6.0f).contains (p))
     {

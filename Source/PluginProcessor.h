@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "Engine/GuitarEngine.h"
+#include "Engine/Player.h"
 
 class DGuitarProcessor : public juce::AudioProcessor
 {
@@ -38,6 +39,7 @@ public:
     int getGuitar() const;
     int getPreset() const;
     static const char* knobId (int i);
+    static int presetPattern (int guitar, int preset);
 
     // notes jouées avec la souris sur les cordes (envoyées au moteur depuis le fil audio)
     void uiNote (int note, float velocity, bool on);
@@ -50,6 +52,13 @@ public:
     float outputLevel() const { return engine.outputLevel(); }
     void copyScope (float* dest, int n) const;   // les n derniers échantillons (mono)
 
+    // joueur de rythmes (arpèges, grattements…) : 0 = jeu direct
+    int getPattern() const;
+    void setPattern (int p);
+    int patternSteps() const { return player.numSteps(); }
+    int patternCurrent() const { return player.currentStep(); }
+    int patternWeight (int i) const { return player.stepWeight (i); }
+
     juce::AudioProcessorValueTreeState apvts;
 
 private:
@@ -57,6 +66,14 @@ private:
     void applySettings();
 
     dguitar::Engine engine;
+    dguitar::Player player;
+    struct EngineSink : dguitar::Player::Sink
+    {
+        dguitar::Engine* e = nullptr;
+        void strike (int note, float vel) override { e->strike (note, vel); }
+        void release (int note) override { e->noteOff (note); }
+    } sink;
+    std::atomic<float>* pPattern = nullptr;
     std::atomic<float>* pGuitar = nullptr;
     std::atomic<float>* pPreset = nullptr;
     std::atomic<float>* pKnob[dguitar::kNumKnobs] {};

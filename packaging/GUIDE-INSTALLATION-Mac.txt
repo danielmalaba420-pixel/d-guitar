@@ -1,4 +1,4 @@
-D-GUITAR 1.0.0 — Guitares électriques
+D-GUITAR 1.1.0 — Guitares électriques et acoustique
 Guide d'installation et de prise en main (Mac)
 Créé et développé par Daniel Malaba — Studio Danova
 =====================================================
@@ -41,10 +41,21 @@ D-GUITAR est un INSTRUMENT (comme un synthé), pas un effet.
 
 3. COMMENT ÇA MARCHE
 --------------------
-3 guitares électriques à modélisation physique (aucun sample) :
-  CLEAN — son clair, cristallin, trémolo
-  DIVE  — son saturé, levier (la molette de pitch plonge la note)
-  CRY   — lead chantant : bends, vibrato, glissés
+4 guitares à modélisation physique (aucun sample) :
+  CLEAN    — son clair, cristallin, trémolo
+  DIVE     — son saturé, levier (la molette de pitch plonge la note)
+  CRY      — guitare qui pleure : jouez fort, la note monte comme un bend ;
+             vibrato de chanteur ; la molette MODULATION est la pédale wah
+  ACOUSTIC — guitare folk à cordes acier ; potards BODY, TONE, BRIGHT ;
+             la molette MODULATION étouffe les cordes avec la paume
+
+RYTHME (panneau en bas à gauche de la guitare)
+  Choisissez un rythme avec les flèches, puis TENEZ UN ACCORD au clavier :
+  D-GUITAR le joue comme un guitariste, calé sur le tempo de votre logiciel.
+  Arpèges : classique, ballade, descendant, 12/8, rapide, Travis picking
+  Grattements : folk, pop, ballade, pop avec étouffés
+  Autres : basse + accord, basse marchante, skank (reggae)
+  OFF = jeu normal, note par note. Fonctionne aussi avec CLEAN.
 
 Chaque guitare a 3 presets (flèches de l'écran du haut).
 Les 7 potards : AMP DRIVE, TONE, WAH, DELAY, CHORUS, REVERB, VOLUME.

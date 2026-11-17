@@ -327,6 +327,8 @@ struct StringVoice
 {
     static constexpr int kLine = 16384;
     Line R, Lc;                 // R : sillet -> chevalet ; Lc : chevalet -> sillet
+    float hexLp = 0.0f;         // filtre avant la saturation corde par corde
+    float gTgt = 0.0f;          // perte visée : on y glisse doucement (un saut de perte fait un clic au micro)
     bool active = false, gate = false, releasing = false, held = false;
     int note = -1;
     uint32_t age = 0;
@@ -384,7 +386,7 @@ public:
         pending.clear();
         wahSvf.reset(); wah2.reset(); pkEq.reset(); os.reset();
         for (auto& b : cabFilt) b.reset();
-        cab.reset(); sagEnv = 0;
+        cab.reset(); sagEnv = 0; for (auto& b : bodyF) b.reset(); bodyHp.reset(); noteAge = 9.0f; wahT = 9.0f;
         toneLo.reset(); toneHi.reset(); midPre.reset(); preHp.reset(); stageLp.reset(); couple.reset(); dcOut.reset();
         chL.clear(); chR.clear(); dlA.clear(); dlB.clear();
         dlFbA.reset(); dlFbB.reset(); dlHpA.reset(); dlHpB.reset();
@@ -435,6 +437,9 @@ public:
         if (delay <= 0) doNoteOn (note, velocity, 0);
         else pending.push_back ({ note, velocity, delay });
     }
+
+    // note jouée tout de suite, sans l'étalement automatique (utilisé par le joueur de rythmes)
+    void strike (int note, float velocity) { doNoteOn (note, clampf (velocity, 0.02f, 1.0f), 0); }
 
     void noteOff (int note)
     {
@@ -496,6 +501,7 @@ private:
     struct Pending { int note; float vel; int delay; };
 
     float sr = 48000.0f;
+    float hexK = 0.3f;
     int guitar = 0;
     const Voicing* V = &voicing (0);
     Settings st;
@@ -520,6 +526,8 @@ private:
     CabFir cab;
     float sagEnv = 0, sagRel = 0.0002f, sagAtt = 0.002f, pg1 = 1, pg2 = 1, pg3 = 1;
     SVF wahSvf, wah2;
+    Biquad bodyF[6], bodyHp;
+    float noteAge = 9.0f, wahT = 9.0f, brightK = 1.0f, sweepS = 0, sweepPh = 0;
     Oversampler4 os;
     float compEnv = 0, compGain = 1, compAtt = 0.01f, compRel = 0.0001f;
     float wahEnv = 0, wahPos = 0, wahAmt = 0, wahPosSm = 0;
@@ -540,19 +548,20 @@ private:
     //==========================================================================
     void configure()
     {
+        hexK = 1.0f - std::exp (-2.0f * kPi * 3200.0f / sr);
         const Voicing& v = *V;
         pkEq.lowpass (v.pkResHz, v.pkResQ, sr);
         // petite bosse de résonance, puis coupure naturelle
         midPre.peaking (900.0f, 0.8f, v.preMidDb, sr);
         preHp.highpass (80.0f, 0.7f, sr);
-        stageLp.setCutoff (6500.0f, sr * 4.0f);
+        stageLp.setCutoff (6500.0f * v.fizz, sr * 4.0f);
         couple.setCutoff (35.0f, sr * 4.0f);
         couple2.setCutoff (90.0f, sr * 4.0f);
-        stage2Lp.setCutoff (7500.0f, sr * 4.0f);
-        stage3Lp.setCutoff (5200.0f, sr * 4.0f);
+        stage2Lp.setCutoff (7500.0f * v.fizz, sr * 4.0f);
+        stage3Lp.setCutoff (5200.0f * v.fizz, sr * 4.0f);
         sagAtt = 1.0f - std::exp (-1.0f / (0.004f * sr));
         sagRel = 1.0f - std::exp (-1.0f / (0.12f * sr));
-        cab.build (sr, v.cabHp, v.cabLp, v.cabPeakHz, v.cabPeakDb, v.driveMaxDb > 20.0f ? 1.0f : 0.5f);
+        cab.build (sr, v.cabHp, v.cabLp, v.cabPeakHz, v.cabPeakDb, v.room >= 0.0f ? v.room : (v.driveMaxDb > 20.0f ? 1.0f : 0.5f));
         stageBias = v.bias;
         cabFilt[0].highpass (v.cabHp, 0.7f, sr);
         cabFilt[1].lowpass (v.cabLp, 0.7f, sr);
@@ -587,6 +596,18 @@ private:
         toneHi.highShelf (2600.0f, tn * 14.0f, sr);
 
         wahAmt = clampf (st.wah, 0, 1);
+        brightK = 0.6f + 0.9f * wahAmt;
+        if (v.acoustic)
+        {
+            const float b = 0.2f + 1.6f * d;     // le potard BODY règle la chaleur de la caisse
+            bodyHp.highpass (72.0f, 0.7f, sr);
+            bodyF[0].peaking (100.0f, 5.0f, 4.0f * b, sr);    // air de la rosace
+            bodyF[1].peaking (200.0f, 4.0f, 4.0f * b, sr);    // table d'harmonie
+            bodyF[2].peaking (285.0f, 5.0f, 1.0f * b, sr);    // fond
+            bodyF[3].peaking (420.0f, 4.0f, 0.0f * b, sr);
+            bodyF[4].peaking (1100.0f, 1.2f, -2.0f * b, sr);  // creux « boîte »
+            bodyF[5].peaking (3300.0f, 0.9f, 0.0f, sr);       // présence des cordes acier
+        }
         chDepth = clampf (st.chorus, 0, 1);
         chMix = 0.55f * chDepth;
         dlFb = 0.22f + 0.45f * clampf (st.delay, 0, 1);
@@ -664,6 +685,7 @@ private:
             held.erase (std::remove (held.begin(), held.end(), note), held.end());
             const bool legatoNow = V->legato && ! held.empty();
             held.push_back (note);
+            if (! legatoNow) { noteAge = 0; wahT = 0; }
             if (legatoNow)
             {
                 for (auto& v : voices)
@@ -679,6 +701,7 @@ private:
         }
         else
         {
+            noteAge = 0;
             // même note rejouée : on réutilise la voix (une corde ne peut sonner qu'une fois)
             for (auto& v : voices) if (v.active && v.note == note) { quickKill (v, 0.05f); }
         }
@@ -689,11 +712,16 @@ private:
         v->note = note; v->age = ++ageCounter; v->vel = vel;
         v->rng.s = 7777u + (uint32_t) note * 131u + ageCounter * 17u;
         {   // accord humain : chaque note est très légèrement désaccordée (±1,5 centième), et le chanteur (CRY) « cueille » la note par en dessous
-            const float det = V->legato ? 0.0f : 0.015f * v->rng.next();
+            const float det = V->legato ? 0.0f : (V->driveMaxDb > 30.0f ? 0.004f : 0.015f) * v->rng.next();   // saturé : presque pas de désaccord (sinon battements « métalliques »)
             v->tgtSemi = (float) note + det;
             v->curSemi = v->tgtSemi;
             v->glideK = glideCoef (V->glideMs);
-            if (V->legato && V->glideMs > 0.5f) { v->curSemi = v->tgtSemi - (0.16f + 0.08f * vel); v->glideK = glideCoef (48.0f); }
+            if (V->legato && V->glideMs > 0.5f)
+            {   // la note « pleure » : attaque prise d'en dessous puis montée (bend), plus large quand on tape fort
+                const float big = V->scoop * clampf ((vel - 0.55f) / 0.35f, 0.0f, 1.0f);
+                v->curSemi = v->tgtSemi - (0.16f + 0.08f * vel) - big;
+                v->glideK = glideCoef (48.0f + 30.0f * big);
+            }
             v->lastSemi = v->curSemi;
         }
         v->swellT = 0; v->swellLen = V->swellMs > 0 ? V->swellMs * 0.001f * sr * (1.25f - 0.5f * vel) : 0;
@@ -734,7 +762,7 @@ private:
                     v.Lc.addAt (M - (float) k, A * wts[q] * y);
                 }
             }
-            v.excAmp *= kPulseMix * (0.6f + 0.8f * harder) * clampf (std::pow (f / 200.0f, 2.0f), 0.05f, 3.0f);   // les cordes graves claquent moins, les aiguës plus
+            v.excAmp *= (V->acoustic ? 0.4f : 1.0f) * kPulseMix * (0.6f + 0.8f * harder) * clampf (std::pow (f / 200.0f, 2.0f), 0.05f, 3.0f);   // les cordes graves claquent moins, les aiguës plus
         }
     }
 
@@ -744,8 +772,11 @@ private:
         const float semi = v.curSemi + pitchOffsetSemi;
         float f = 440.0f * std::exp2 ((semi - 69.0f) / 12.0f);
         f = clampf (f, 10.0f, sr * 0.4f);
-        const float t60 = clampf (V->t60 * std::pow (220.0f / f, 0.35f), 0.12f, 30.0f);
+        float t60 = V->t60 * std::pow (220.0f / f, 0.35f);
         float fc = V->loopFc * std::pow (std::max (f, 40.0f) / 220.0f, 0.25f);
+        if (V->acoustic) fc *= brightK;
+        if (V->mod == ModMode::PalmMute) { t60 /= (1.0f + 7.0f * modS); fc *= 1.0f - 0.55f * modS; }   // paume sur le chevalet : étouffé et sombre
+        t60 = clampf (t60, 0.12f, 30.0f);
         float p = std::exp (-2.0f * kPi * std::min (fc, sr * 0.45f) / sr);
         const float trt = 1.0f / f;
         float G = std::pow (10.0f, -3.0f * trt / t60);
@@ -755,7 +786,7 @@ private:
         {
             const float rg = std::pow (10.0f, -3.0f * trt / std::max (0.02f, v.releaseT));
             gl = std::min (G, rg);
-            pl = std::max (p, 0.55f);
+            // le filtre de boucle reste le même : changer sa phase déplaçait d'un coup la longueur de corde (= clic)
         }
         v.apA = V->disp;
         const float w0 = 2.0f * kPi * f / sr;
@@ -769,7 +800,8 @@ private:
         const float magLp = std::abs (Hlp);
         v.pkGain = std::pow (220.0f / std::max (f, 30.0f), 2.1f) * 0.9f;
         v.p = pl;
-        v.g = std::min (0.99999f, gl / std::max (0.2f, magLp));
+        v.gTgt = std::min (0.99999f, gl / std::max (0.2f, magLp));
+        if (first) v.g = v.gTgt;
         float M = (sr / f - 2.0f - Df) * 0.5f;
         M = clampf (M, 6.0f, (float) (StringVoice::kLine - 16));
         v.Mtgt = M;
@@ -812,6 +844,7 @@ private:
             v.ax1[k] = x; v.ay1[k] = y; x = y;
         }
         v.lp1 = (1.0f - v.p) * x + v.p * v.lp1 + 1.0e-20f;
+        v.g += (v.gTgt - v.g) * 0.0025f;
         const float bridgeOut = -v.g * v.lp1;
         const float nutOut = -0.9993f * nutIn;
         v.R.push (nutOut);
@@ -866,7 +899,7 @@ private:
             const float k = 1.0f - (float) v.life / (0.011f * sr);
             v.sq.set (3200.0f + 1800.0f * v.vel, 0.9f, sr);
             v.sq.process (v.rng.next());
-            out += v.sq.bp * k * k * (0.018f + 0.05f * v.vel * v.vel) * v.pkGain;
+            out += v.sq.bp * k * k * (0.018f + 0.05f * v.vel * v.vel) * v.pkGain * (V->acoustic ? 0.12f : 1.0f);
         }
 
         const float aPre = std::fabs (out);
@@ -916,15 +949,34 @@ private:
             vibPh += vibIncBase * (1.0f + 0.07f * 200.0f * w1); if (vibPh > 2.0f * kPi) vibPh -= 2.0f * kPi;
             float bs = bendS >= 0 ? bendS * v.bendUp : (v.mod == ModMode::Whammy ? -v.bendDown * std::pow (-bendS, 1.45f) : bendS * v.bendDown);
             float vibC = 0;
-            if (v.mod != ModMode::Wah || true)
+            noteAge += 1.0f / sr;
             {
-                const float depth = v.mod == ModMode::Wah ? 0.0f : modS;
-                vibC = depth * v.vibCents * (1.0f + 0.15f * 200.0f * w2) * std::sin (vibPh) * 0.01f;   // centièmes -> demi-tons
+                const bool manual = v.mod != ModMode::Wah && v.mod != ModMode::PalmMute;
+                float cents = manual ? modS * v.vibCents : 0.0f;
+                if (v.autoVibCents > 0.0f)
+                {   // vibrato de chanteur : la note d'abord droite, puis le vibrato s'installe
+                    const float t = clampf ((noteAge - v.autoVibDelay) / 0.5f, 0.0f, 1.0f);
+                    cents += v.autoVibCents * t * t * (3.0f - 2.0f * t);
+                }
+                vibC = cents * (1.0f + 0.15f * 200.0f * w2) * std::sin (vibPh) * 0.01f;   // centièmes -> demi-tons
             }
             lastPitchOffset = pitchOffsetSemi;
             pitchOffsetSemi = bs + vibC;
             float acc = 0;
-            for (auto& sv : voices) if (sv.active) acc += voiceSample (sv);
+            if (V->hex > 0.0f)
+            {   // saturation corde par corde (comme un micro hexaphonique) : chaque corde sature seule,
+                // les accords gardent leurs notes au lieu de produire des sons parasites d'intermodulation
+                const float h = V->hex, K = 22.0f, lpk = hexK;
+                for (auto& sv : voices)
+                    if (sv.active)
+                    {
+                        const float d = voiceSample (sv);
+                        sv.hexLp += (d - sv.hexLp) * lpk;
+                        acc += (1.0f - h) * d + h * std::tanh (sv.hexLp * K) * (1.6f / K);
+                    }
+            }
+            else
+                for (auto& sv : voices) if (sv.active) acc += voiceSample (sv);
             monoBuf[i] = acc;
         }
 
@@ -953,31 +1005,33 @@ private:
             monoBuf[i] = x;
         }
 
-        // ---- wah (ou voyelle « cri »)
-        const bool usesWah = (v.mod == ModMode::Wah || v.mod == ModMode::WahVibrato) || wahAmt > 0.001f;
+        // ---- wah-wah (pédale « cry baby ») : filtre passe-bande résonnant qui balaie les médiums, devant l'ampli
+        const bool usesWah = ! v.acoustic && (v.mod == ModMode::Wah || v.mod == ModMode::WahVibrato || wahAmt > 0.001f);
         if (usesWah && wahAmt > 0.001f)
         {
-            const float envA = 1.0f - std::exp (-1.0f / (0.004f * sr));
-            const float envR = 1.0f - std::exp (-1.0f / (0.120f * sr));
             for (int i = 0; i < n; ++i)
             {
+                if ((i & 7) == 0)
+                {
+                    // à chaque attaque la pédale s'ouvre (« ouah ») puis retombe lentement ; la molette prend ensuite la main
+                    wahT += 8.0f / sr;
+                    const float sw = (1.0f - std::exp (-wahT / 0.06f)) * std::exp (-wahT / 0.9f) * (1.0f / 0.78f);
+                    const float drive = clampf (v.wahAuto * sw * (1.0f - modS) + modS, 0.0f, 1.0f);
+                    float pos = v.wahBase + (1.0f - v.wahBase) * drive;
+                    if (v.mod != ModMode::Wah) pos += 0.3f * modS * (1.0f - v.wahBase);
+                    wahPos = clampf (pos, 0.0f, 1.0f);
+                }
+                wahPosSm += (wahPos - wahPosSm) * 0.004f;
                 const float x = monoBuf[i];
-                const float a = std::fabs (x);
-                wahEnv += (a - wahEnv) * (a > wahEnv ? envA : envR);
-                float pos;
-                if (v.mod == ModMode::Wah) pos = v.wahBase + (1.0f - v.wahBase) * modS;
-                else if (v.mod == ModMode::WahVibrato) pos = v.wahBase + 0.55f * modS;
-                else pos = v.wahBase + 0.3f * modS;
-                pos += v.wahAuto * clampf (wahEnv * 3.0f, 0.0f, 1.0f) * (1.0f - v.wahBase);
-                pos = clampf (pos, 0.0f, 1.0f);
-                wahPosSm += (pos - wahPosSm) * 0.004f;
-                const float fc = v.wahMin * std::pow (v.wahMax / v.wahMin, wahPosSm);
-                if ((i & 7) == 0) { wahSvf.set (fc, v.wahQ, sr); wah2.set (fc * 2.7f, 2.0f, sr); }
+                if ((i & 7) == 0)
+                {
+                    const float fc = v.wahMin * std::pow (v.wahMax / v.wahMin, wahPosSm);
+                    wahSvf.set (fc, v.wahQ, sr);
+                }
                 wahSvf.process (x);
-                wah2.process (x);
-                const float wet = wahSvf.bp * 0.55f + v.wahFormant * wah2.bp * 0.25f;
-                const float mixAmt = wahAmt;
-                monoBuf[i] = x * (1.0f - 0.75f * mixAmt) + wet * mixAmt * 1.7f;
+                const float bpN = wahSvf.bp / v.wahQ;                 // passe-bande à gain 1 au centre
+                const float y = (0.45f * x + 3.4f * bpN) * 0.55f;     // pédale : bosse d'environ +11 dB qui glisse
+                monoBuf[i] = x * (1.0f - wahAmt) + y * wahAmt;
             }
             wahShown.store (wahPosSm);
         }
@@ -988,6 +1042,20 @@ private:
         }
 
         if (debugTap == 2) { for (int i = 0; i < n; ++i) { outL[i] = outR[i] = monoBuf[i]; } return; }
+        // ---- guitare acoustique : caisse de résonance au lieu de l'ampli
+        if (v.acoustic)
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                float x = bodyHp.process (monoBuf[i]);
+                for (int k = 0; k < 6; ++k) x = bodyF[k].process (x);
+                x = toneLo.process (x);
+                x = toneHi.process (x);
+                x = dcOut.process (x);
+                monoBuf[i] = x * postGain * kAmpOut * 3.0f;
+            }
+        }
+        else
         // ---- ampli : bosse de médiums, 2 étages à lampes (x4), tonalité, baffle
         for (int i = 0; i < n; ++i)
         {

@@ -9,6 +9,13 @@ const char* const kKnobIds[dguitar::kNumKnobs] = { "drive", "tone", "wah", "dela
 const char* const kKnobNames[dguitar::kNumKnobs] = { "Amp Drive", "Tone", "Wah", "Delay", "Chorus", "Reverb", "Volume" };
 }
 
+// rythme proposé par chaque preset (acoustique : Folk = grattement folk, Arpèges = arpège ballade, Chaleur = jeu direct)
+int DGuitarProcessor::presetPattern (int guitar, int preset)
+{
+    if (guitar == 3) { const int m[3] = { 7, 2, 0 }; return m[juce::jlimit (0, 2, preset)]; }
+    return 0;
+}
+
 const char* DGuitarProcessor::knobId (int i) { return kKnobIds[juce::jlimit (0, dguitar::kNumKnobs - 1, i)]; }
 
 APVTS::ParameterLayout DGuitarProcessor::createLayout()
@@ -25,6 +32,9 @@ APVTS::ParameterLayout DGuitarProcessor::createLayout()
     for (int i = 0; i < dguitar::kNumKnobs; ++i)
         layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { kKnobIds[i], 1 }, kKnobNames[i],
                                                                  juce::NormalisableRange<float> (0.0f, 1.0f), d.preset[0][i] / 100.0f, pct));
+    juce::StringArray pats { "OFF" };
+    for (const auto& pd : dguitar::patterns()) pats.add (pd.name);
+    layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "pattern", 1 }, "Rythme", pats, 0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "pitchbend", 1 }, "Pitch Bend", juce::NormalisableRange<float> (-1.0f, 1.0f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "mod", 1 }, "Modulation", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f, pct));
     return layout;
@@ -39,6 +49,8 @@ DGuitarProcessor::DGuitarProcessor()
     for (int i = 0; i < dguitar::kNumKnobs; ++i) pKnob[i] = apvts.getRawParameterValue (kKnobIds[i]);
     pPitch = apvts.getRawParameterValue ("pitchbend");
     pMod = apvts.getRawParameterValue ("mod");
+    pPattern = apvts.getRawParameterValue ("pattern");
+    sink.e = &engine;
 }
 
 bool DGuitarProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -51,11 +63,25 @@ void DGuitarProcessor::prepareToPlay (double sampleRate, int)
     engine.prepare (sampleRate);
     applySettings();
     engine.reset();
+    player.prepare (sampleRate);
     fifo.reset();
     midiPitch = 0.0f; midiMod = 0.0f;
 }
 
 int DGuitarProcessor::getGuitar() const { return juce::jlimit (0, dguitar::kNumGuitars - 1, juce::roundToInt (pGuitar->load())); }
+int DGuitarProcessor::getPattern() const { return juce::jlimit (0, dguitar::numPatterns(), juce::roundToInt (pPattern->load())); }
+
+void DGuitarProcessor::setPattern (int p)
+{
+    p = ((p % (dguitar::numPatterns() + 1)) + dguitar::numPatterns() + 1) % (dguitar::numPatterns() + 1);
+    if (auto* q = apvts.getParameter ("pattern"))
+    {
+        q->beginChangeGesture();
+        q->setValueNotifyingHost (q->convertTo0to1 ((float) p));
+        q->endChangeGesture();
+    }
+}
+
 int DGuitarProcessor::getPreset() const { return juce::jlimit (0, 2, juce::roundToInt (pPreset->load())); }
 
 float DGuitarProcessor::effectivePitch() const { return juce::jlimit (-1.0f, 1.0f, pPitch->load() + midiPitch.load()); }
@@ -86,6 +112,7 @@ void DGuitarProcessor::selectGuitar (int index)
     set ("guitar", (float) index);
     set ("preset", 0.0f);
     for (int i = 0; i < dguitar::kNumKnobs; ++i) set (kKnobIds[i], d.preset[0][i] / 100.0f);
+    set ("pattern", (float) presetPattern (index, 0));
 }
 
 void DGuitarProcessor::selectPreset (int index)
@@ -103,6 +130,7 @@ void DGuitarProcessor::selectPreset (int index)
     };
     set ("preset", (float) index);
     for (int i = 0; i < dguitar::kNumKnobs; ++i) set (kKnobIds[i], d.preset[index][i] / 100.0f);
+    if (getGuitar() == 3) set ("pattern", (float) presetPattern (3, index));
 }
 
 void DGuitarProcessor::uiNote (int note, float velocity, bool on)
@@ -127,9 +155,24 @@ void DGuitarProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     if (buffer.getNumChannels() < 2 || total == 0) return;
 
     applySettings();
+    {
+        const int pat = getPattern();
+        if (pat != player.pattern())
+        {
+            player.allOff (sink);
+            player.setPattern (pat);
+        }
+    }
+    bool hostPlaying = false;
+    double ppq = 0.0;
     if (auto* ph = getPlayHead())
         if (auto pos = ph->getPosition())
-            if (auto bpm = pos->getBpm()) engine.setTempo (*bpm);
+        {
+            if (auto bpm = pos->getBpm()) { engine.setTempo (*bpm); player.setTempo (*bpm); }
+            if (pos->getIsPlaying())
+                if (auto q = pos->getPpqPosition()) { hostPlaying = true; ppq = *q; }
+        }
+    player.setHost (hostPlaying, ppq);
 
     // notes jouées à la souris
     {
@@ -150,20 +193,32 @@ void DGuitarProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
         if (n <= 0) return;
         engine.pitchWheel (effectivePitch());
         engine.modWheel (effectiveMod());
-        engine.process (L + pos, R + pos, n);
-        pos = upTo;
+        if (! player.active())
+        {
+            engine.process (L + pos, R + pos, n);
+            pos = upTo;
+            return;
+        }
+        // avec un rythme : on avance par petits morceaux pour que les coups tombent au bon moment
+        while (pos < upTo)
+        {
+            const int c = juce::jmin (32, upTo - pos);
+            player.advance (c, sink);
+            engine.process (L + pos, R + pos, c);
+            pos += c;
+        }
     };
 
     for (const auto meta : midi)
     {
         render (juce::jlimit (pos, total, meta.samplePosition));
         const auto m = meta.getMessage();
-        if (m.isNoteOn()) engine.noteOn (m.getNoteNumber(), m.getFloatVelocity());
-        else if (m.isNoteOff()) engine.noteOff (m.getNoteNumber());
+        if (m.isNoteOn()) { if (player.active()) player.noteOn (m.getNoteNumber(), m.getFloatVelocity(), sink); else engine.noteOn (m.getNoteNumber(), m.getFloatVelocity()); }
+        else if (m.isNoteOff()) { if (player.active()) player.noteOff (m.getNoteNumber(), sink); else engine.noteOff (m.getNoteNumber()); }
         else if (m.isPitchWheel()) midiPitch = (float) (m.getPitchWheelValue() - 8192) / 8192.0f;
         else if (m.isControllerOfType (1)) midiMod = (float) m.getControllerValue() / 127.0f;
         else if (m.isControllerOfType (64)) engine.sustain (m.getControllerValue() >= 64);
-        else if (m.isAllNotesOff() || m.isAllSoundOff()) engine.allNotesOff();
+        else if (m.isAllNotesOff() || m.isAllSoundOff()) { player.allOff (sink); engine.allNotesOff(); }
     }
     render (total);
 

@@ -7,10 +7,10 @@ int main()
 {
     _mm_setcsr (_mm_getcsr() | 0x8040);
     const int sr = 48000;
-    const double target = -22.0;   // dBFS RMS visé
+    double target = -22.0;   // dBFS RMS visé
     for (int gi = 0; gi < kNumGuitars; ++gi)
     {
-        std::printf ("{ // %s\n  ", voicing (gi).name);
+        target = voicing (gi).acoustic ? -34.0 : -22.0; std::printf ("{ // %s\n  ", voicing (gi).name);
         for (int k = 0; k <= 8; ++k)
         {
             Engine e; e.prepare (sr);

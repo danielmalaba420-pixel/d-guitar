@@ -37,6 +37,7 @@ private:
     void drawKnob (juce::Graphics&, int i, float cx, float cy);
     void drawWheel (juce::Graphics&, juce::Rectangle<float> r, float value01, bool centreLine);
     void drawStage (juce::Graphics&);
+    void drawPattern (juce::Graphics&);
     void drawScreen (juce::Graphics&);
     int hitString (juce::Point<float> p) const;
     int noteForHit (int string, juce::Point<float> p) const;
@@ -51,7 +52,7 @@ private:
     float scale = 0.8f;
 
     juce::Typeface::Ptr tfMed, tfSemi, tfBold, tfMono;
-    Guitar guitars[3];
+    Guitar guitars[4];
 
     juce::Image staticImg;
     float staticScale = 0.0f;
