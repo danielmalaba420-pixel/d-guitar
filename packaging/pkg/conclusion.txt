@@ -1,0 +1,14 @@
+D-GUITAR est installé !
+
+Relancez Logic Pro : D-GUITAR se trouve dans
+  Instrument › Audio Units › Danova › D-GUITAR
+
+Dans les autres logiciels : cherchez « D-GUITAR » dans vos instruments VST3.
+
+Questions / assistance : danielmalaba420@gmail.com
+Merci d'avoir choisi D-GUITAR !
+
+—
+
+D-GUITAR is installed. Restart your DAW and look for D-GUITAR
+(Logic: Instrument › Audio Units › Danova › D-GUITAR).

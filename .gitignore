@@ -1,0 +1,8 @@
+build*/
+dist/
+.DS_Store
+tests/harness
+tests/dbg.py
+tests/__pycache__/
+tests/harness2
+tests/speed

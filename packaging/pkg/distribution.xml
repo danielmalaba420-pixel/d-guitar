@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>D-GUITAR — Studio Danova</title>
+    <welcome file="welcome.txt" mime-type="text/plain"/>
+    <license file="licence.txt" mime-type="text/plain"/>
+    <conclusion file="conclusion.txt" mime-type="text/plain"/>
+    <options customize="never" require-scripts="false" hostArchitectures="x86_64,arm64"/>
+    <domains enable_localSystem="true"/>
+    <volume-check>
+        <allowed-os-versions><os-version min="10.15"/></allowed-os-versions>
+    </volume-check>
+    <choices-outline>
+        <line choice="dguitar"/>
+    </choices-outline>
+    <choice id="dguitar" title="D-GUITAR">
+        <pkg-ref id="com.studiodanova.dguitar.pkg"/>
+    </choice>
+    <pkg-ref id="com.studiodanova.dguitar.pkg" version="@VERSION@">dguitar-core.pkg</pkg-ref>
+</installer-gui-script>

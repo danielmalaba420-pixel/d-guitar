@@ -1,0 +1,78 @@
+name: Build D-GUITAR
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+jobs:
+  mac:
+    name: macOS (Apple Silicon + Intel)
+    runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -G Xcode -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release --target DGUITAR_AU DGUITAR_VST3 -- -quiet
+      - name: Validate the Audio Unit (same check as Logic Pro)
+        run: |
+          A=build/DGUITAR_artefacts/Release
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "$A/AU/D-GUITAR.component" ~/Library/Audio/Plug-Ins/Components/
+          codesign --force --deep --sign - ~/Library/Audio/Plug-Ins/Components/D-GUITAR.component
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          auval -v aumu Dgtr Dnva | tail -25
+          rm -rf ~/Library/Audio/Plug-Ins/Components/D-GUITAR.component
+      - name: Sign (ad-hoc) and package
+        run: |
+          V=1.0.0
+          A=build/DGUITAR_artefacts/Release
+          mkdir -p dist/D-GUITAR-Mac
+          cp -R "$A/AU/D-GUITAR.component" "$A/VST3/D-GUITAR.vst3" dist/D-GUITAR-Mac/
+          for b in dist/D-GUITAR-Mac/*; do codesign --force --deep --sign - "$b"; done
+          lipo -info "dist/D-GUITAR-Mac/D-GUITAR.component/Contents/MacOS/D-GUITAR"
+          # Installateur .pkg classique (licence à accepter, mot de passe, installation pour tout le Mac).
+          mkdir -p pkgroot/Library/Audio/Plug-Ins/Components pkgroot/Library/Audio/Plug-Ins/VST3 pkgres
+          cp -R dist/D-GUITAR-Mac/D-GUITAR.component pkgroot/Library/Audio/Plug-Ins/Components/
+          cp -R dist/D-GUITAR-Mac/D-GUITAR.vst3 pkgroot/Library/Audio/Plug-Ins/VST3/
+          pkgbuild --analyze --root pkgroot comp.plist
+          i=0; while /usr/libexec/PlistBuddy -c "Print :$i" comp.plist >/dev/null 2>&1; do
+            /usr/libexec/PlistBuddy -c "Delete :$i:BundleIsRelocatable" comp.plist 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :$i:BundleIsRelocatable bool false" comp.plist; i=$((i+1)); done
+          pkgbuild --root pkgroot --component-plist comp.plist --identifier com.studiodanova.dguitar.pkg --version $V \
+                   --scripts packaging/pkg/scripts --install-location / dguitar-core.pkg
+          sed "s/@VERSION@/$V/g" packaging/pkg/distribution.xml > distribution.xml
+          sed "s/@VERSION@/$V/g" packaging/pkg/welcome.txt > pkgres/welcome.txt
+          cp packaging/pkg/conclusion.txt pkgres/conclusion.txt
+          cp packaging/LICENCE-D-GUITAR.txt pkgres/licence.txt
+          productbuild --distribution distribution.xml --resources pkgres --package-path . "Installer D-GUITAR.pkg"
+          # icône D-GUITAR sur l'installateur (visible dans le Finder après décompression)
+          cp Resources/icon/icon-1024.png /tmp/dguitar-icon.png
+          if sips -i /tmp/dguitar-icon.png >/dev/null && DeRez -only icns /tmp/dguitar-icon.png > /tmp/dguitar-icon.rsrc \
+             && Rez -append /tmp/dguitar-icon.rsrc -o "Installer D-GUITAR.pkg" && SetFile -a C "Installer D-GUITAR.pkg"; then
+            echo "Icone ajoutee a l'installateur"
+          else
+            echo "::warning::icone de l'installateur non ajoutee"
+          fi
+          rm -rf dist/D-GUITAR-Mac/*
+          mv "Installer D-GUITAR.pkg" dist/D-GUITAR-Mac/
+          cp packaging/GUIDE-INSTALLATION-Mac.txt "dist/D-GUITAR-Mac/GUIDE D INSTALLATION.txt"
+          cp packaging/LICENCE-D-GUITAR.txt "dist/D-GUITAR-Mac/LICENCE - D-GUITAR.txt"
+          cp Resources/icon/icon-1024.png "dist/D-GUITAR-Mac/D-GUITAR icone.png"
+          ls -la dist/D-GUITAR-Mac
+          cd dist && ditto -c -k --sequesterRsrc --keepParent D-GUITAR-Mac D-GUITAR-$V-Mac.zip
+      - name: Publish to builds-mac branch
+        run: |
+          mkdir out && cp dist/D-GUITAR-1.0.0-Mac.zip out/ && cd out
+          echo "Commit ${GITHUB_SHA}" > BUILD.txt
+          git init -q && git checkout -q -b builds-mac && git add .
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "Mac ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" builds-mac

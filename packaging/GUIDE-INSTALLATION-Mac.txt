@@ -1,0 +1,57 @@
+D-GUITAR 1.0.0 — Guitares électriques
+Guide d'installation et de prise en main (Mac)
+Créé et développé par Daniel Malaba — Studio Danova
+=====================================================
+
+COMPATIBILITÉ
+-------------
+- Mac Apple Silicon (M1, M2, M3, M4) et Mac Intel, macOS 10.15 ou plus récent
+- AU : Logic Pro, GarageBand, MainStage
+- VST3 : Ableton Live, Studio One, Cubase, Reaper, Bitwig, FL Studio…
+
+
+1. INSTALLER (2 minutes)
+------------------------
+1. Quittez votre logiciel de musique (Logic, Ableton…).
+2. Double-cliquez sur le fichier zip : un dossier « D-GUITAR-Mac » apparaît.
+3. Double-cliquez sur « Installer D-GUITAR.pkg ».
+4. Suivez l'installateur : Continuer › Accepter la licence › Installer
+   (le Mac demande votre mot de passe : c'est normal, comme pour tout plugin).
+5. Relancez votre logiciel de musique. C'est tout !
+
+SI LE MAC DIT « impossible d'ouvrir » / « Apple ne peut pas vérifier… »
+  a. Cliquez « OK » (ou « Terminé »).
+  b. Ouvrez Réglages Système › Confidentialité et sécurité.
+  c. Tout en bas, à côté de « Installer D-GUITAR.pkg », cliquez « Ouvrir quand même »,
+     puis confirmez avec votre mot de passe.
+  d. L'installateur s'ouvre : continuez à l'étape 4.
+
+L'installateur remplace automatiquement toute ancienne version de D-GUITAR.
+Les plugins sont installés pour tout le Mac :
+  /Library/Audio/Plug-Ins/Components  et  /Library/Audio/Plug-Ins/VST3
+
+
+2. OUVRIR D-GUITAR
+------------------
+D-GUITAR est un INSTRUMENT (comme un synthé), pas un effet.
+- Logic Pro : créez une piste « Instrument logiciel », cliquez dans la case Instrument,
+  puis Audio Units > Danova > D-GUITAR. Jouez au clavier MIDI.
+- Ableton, Studio One, Cubase, Reaper… : chargez « D-GUITAR » (Danova) comme instrument VST3.
+
+
+3. COMMENT ÇA MARCHE
+--------------------
+3 guitares électriques à modélisation physique (aucun sample) :
+  CLEAN — son clair, cristallin, trémolo
+  DIVE  — son saturé, levier (la molette de pitch plonge la note)
+  CRY   — lead chantant : bends, vibrato, glissés
+
+Chaque guitare a 3 presets (flèches de l'écran du haut).
+Les 7 potards : AMP DRIVE, TONE, WAH, DELAY, CHORUS, REVERB, VOLUME.
+- AMP DRIVE : de propre à très saturé. Baisse ou monte-le selon le son voulu.
+- DELAY : se cale sur le tempo de votre logiciel (croche pointée).
+- Molette PITCH BEND (à gauche, revient au centre) et molette MODULATION (à droite) :
+  elles répondent aussi à votre clavier MIDI (pitch bend, CC1). La pédale de sustain (CC64) fonctionne.
+- Vous pouvez aussi cliquer ou glisser directement sur les cordes de la guitare à l'écran.
+
+Besoin d'aide : danielmalaba420@gmail.com

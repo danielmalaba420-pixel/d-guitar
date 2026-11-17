@@ -1,0 +1,11 @@
+#!/bin/bash
+# Retire les anciennes copies installées dans le dossier de l'utilisateur (versions précédentes),
+# sinon Logic pourrait voir deux D-GUITAR. Puis relance l'inventaire des plugins Audio Unit.
+U=$(stat -f%Su /dev/console 2>/dev/null)
+H=$(dscl . -read "/Users/$U" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
+if [ -n "$H" ] && [ -d "$H" ]; then
+  rm -rf "$H/Library/Audio/Plug-Ins/Components/D-GUITAR.component" "$H/Library/Audio/Plug-Ins/VST3/D-GUITAR.vst3"
+fi
+xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/Components/D-GUITAR.component" "/Library/Audio/Plug-Ins/VST3/D-GUITAR.vst3" 2>/dev/null
+killall -9 AudioComponentRegistrar 2>/dev/null
+exit 0

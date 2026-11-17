@@ -1,0 +1,122 @@
+================================================================
+  D-GUITAR — Guitares électriques à modélisation physique
+  CONTRAT DE LICENCE UTILISATEUR / END USER LICENSE AGREEMENT
+  © 2026 Studio Danova — Daniel Malaba. Tous droits réservés.
+================================================================
+
+----------------------------- FRANÇAIS -----------------------------
+
+En installant, en copiant ou en utilisant D-GUITAR, vous acceptez
+les conditions ci-dessous. Si vous ne les acceptez pas, n'installez
+pas le logiciel.
+
+1. PROPRIÉTÉ
+   D-GUITAR (le logiciel, son moteur audio, ses réglages, son design,
+   son icône et tous ses fichiers) reste la propriété exclusive de
+   Studio Danova et de Daniel Malaba. Vous n'achetez pas le logiciel :
+   vous achetez le droit de l'utiliser selon cette licence.
+
+2. CE QUI EST AUTORISÉ
+   - Installer D-GUITAR sur 2 ORDINATEURS au maximum vous appartenant
+     (par exemple un ordinateur de studio et un ordinateur pour le
+     live), Mac et/ou Windows.
+   - L'utiliser pour un usage personnel ou professionnel : mixage,
+     enregistrements, productions, concerts, cultes, répétitions.
+   - Utiliser librement, sans redevance, le son traité avec D-GUITAR
+     dans vos morceaux et productions, y compris commerciaux.
+
+3. CE QUI EST STRICTEMENT INTERDIT
+   - Revendre D-GUITAR, en totalité ou en partie, sous quelque forme
+     que ce soit.
+   - Le donner, le partager, le prêter, le louer ou le distribuer
+     (clé USB, WhatsApp, Telegram, Google Drive, MEGA, sites de
+     téléchargement, groupes, etc.).
+   - L'installer sur plus de 2 ordinateurs.
+   - Extraire, copier ou revendre ses fichiers, ses images ou son
+     moteur, seuls ou dans un autre produit (autre plugin, appli…).
+   - Modifier, décompiler, désassembler ou renommer le logiciel, ou le
+     faire passer pour le vôtre.
+
+4. LICENCE PERSONNELLE
+   La licence est accordée uniquement à la personne qui a acheté
+   D-GUITAR auprès de Studio Danova / Daniel Malaba. Elle ne peut être
+   ni cédée, ni transférée, ni partagée sans l'accord écrit de
+   Studio Danova.
+
+5. MISES À JOUR
+   Les mises à jour de la version 1 (1.x) sont offertes aux
+   acheteurs. Une future version majeure pourra être proposée à part.
+
+6. NON-RESPECT
+   Toute violation de ces conditions met fin immédiatement à votre
+   licence, sans remboursement. Studio Danova se réserve le droit
+   d'engager toute action pour faire respecter ses droits.
+
+7. GARANTIE ET RESPONSABILITÉ
+   D-GUITAR est fourni « tel quel ». Testez toujours vos réglages
+   avant un concert, un culte ou une livraison de mix. Studio Danova
+   ne peut être tenu responsable d'une perte de données, d'un problème
+   matériel ou d'un incident survenu pendant son utilisation.
+
+8. CONTACT ET ASSISTANCE
+   Pour toute question, aide ou demande d'autorisation :
+   danielmalaba420@gmail.com
+
+----------------------------- ENGLISH ------------------------------
+
+By installing, copying or using D-GUITAR, you agree to the terms
+below. If you do not agree, do not install the software.
+
+1. OWNERSHIP
+   D-GUITAR (the software, its audio engine, settings, design, icon
+   and all files) remains the exclusive property of Studio Danova and
+   Daniel Malaba. You are not buying the software: you are buying the
+   right to use it under this license.
+
+2. WHAT YOU MAY DO
+   - Install D-GUITAR on up to 2 COMPUTERS that you own (for example
+     a studio computer and a live computer), Mac and/or Windows.
+   - Use it for personal or professional purposes: mixing, recordings,
+     productions, live shows, church services, rehearsals.
+   - Use the audio you process with D-GUITAR in your songs and
+     productions, including commercial ones, royalty-free.
+
+3. WHAT IS STRICTLY FORBIDDEN
+   - Reselling D-GUITAR, in whole or in part, in any form.
+   - Giving away, sharing, lending, renting or distributing it (USB
+     drives, WhatsApp, Telegram, Google Drive, MEGA, download sites,
+     groups, etc.).
+   - Installing it on more than 2 computers.
+   - Extracting, copying or reselling its files, images or engine, on
+     their own or inside another product (plugin, app…).
+   - Modifying, decompiling, disassembling or renaming the software, or
+     passing it off as your own.
+
+4. PERSONAL LICENSE
+   This license is granted only to the person who bought D-GUITAR from
+   Studio Danova / Daniel Malaba. It may not be assigned, transferred
+   or shared without written consent from Studio Danova.
+
+5. UPDATES
+   Version 1 updates (1.x) are free for buyers. A future major version
+   may be offered separately.
+
+6. BREACH
+   Any violation of these terms immediately terminates your license,
+   without refund. Studio Danova reserves the right to take any action
+   necessary to enforce its rights.
+
+7. WARRANTY AND LIABILITY
+   D-GUITAR is provided "as is". Always test your settings before a
+   show, a service or a mix delivery. Studio Danova is not liable for
+   any data loss, hardware issue or incident arising from its use.
+
+8. CONTACT AND SUPPORT
+   For questions, help or permission requests:
+   danielmalaba420@gmail.com
+
+================================================================
+  Studio Danova — Daniel Malaba — Kinshasa, RDC
+  Merci de soutenir un créateur indépendant.
+  Thank you for supporting an independent creator.
+================================================================

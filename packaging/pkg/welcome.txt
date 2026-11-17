@@ -1,0 +1,14 @@
+Bienvenue dans l'installation de D-GUITAR @VERSION@ — Studio Danova.
+
+Cet installateur met en place :
+  • le plugin AU pour Logic Pro (et GarageBand, MainStage)
+  • le plugin VST3 pour Ableton Live, Studio One, Cubase, Reaper…
+
+Il remplace automatiquement toute ancienne version de D-GUITAR.
+Fermez Logic Pro (ou votre logiciel) avant de continuer.
+
+—
+
+Welcome to the D-GUITAR @VERSION@ installer.
+It installs the AU plugin (Logic Pro) and the VST3 plugin,
+and replaces any previous version. Please quit your DAW before continuing.
