@@ -158,7 +158,7 @@ void DGuitarEditor::buildStatic (float ps)
     g.setGradientFill (ColourGradient (Colour (0xffc9622a), 1410.0f, 856.0f, Colour (0x00c9622a), 960.0f, 856.0f, false));
     g.fillRect (960.0f, 856.0f, 450.0f, 1.0f);
     spaced (g, "D-GUITAR", { 640.0f, 836.0f, 320.0f, 40.0f }, Justification::centred, font (32.0f, 2).withExtraKerningFactor (0.34f), Colour (0xffe9dfd3));
-    spaced (g, String::fromUTF8 ("AU \xc2\xb7 VST3 \xc2\xb7 v1.1"), { 1340.0f, 836.0f, 216.0f, 40.0f }, Justification::right, font (14.0f, 1).withExtraKerningFactor (0.18f), kDim);
+    spaced (g, String::fromUTF8 ("AU \xc2\xb7 VST3 \xc2\xb7 v1.2"), { 1340.0f, 836.0f, 216.0f, 40.0f }, Justification::right, font (14.0f, 1).withExtraKerningFactor (0.18f), kDim);
 }
 
 //==============================================================================
@@ -231,6 +231,15 @@ void DGuitarEditor::drawScreen (Graphics& g)
     const int gi = proc.getGuitar(), pi = proc.getPreset();
     const auto& vc = dguitar::voicing (gi);
     spaced (g, "PRESET " + String (pi + 1) + "/3", { 304.0f, 38.0f, 118.0f, 14.0f }, Justification::right, font (11.0f, 3).withExtraKerningFactor (0.16f), Colour (0xff6f655b));
+    {
+        String st;
+        Colour c (0xff6f655b);
+        if (gi == 0) st = String::fromUTF8 ("CORDE MODÃLISÃ" "E");
+        else if (proc.usesSamples()) { st = "VRAIE GUITARE"; c = Colour (0xff7fb069); }
+        else if (proc.sampleStatus() == 1) st = String::fromUTF8 ("CHARGEMENTâ¦");
+        else if (proc.sampleStatus() == 3) { st = "SAMPLES ABSENTS"; c = Colour (0xffe5534b); }
+        spaced (g, st, { 120.0f, 38.0f, 176.0f, 14.0f }, Justification::right, font (11.0f, 3).withExtraKerningFactor (0.12f), c);
+    }
     spaced (g, vc.name, { 66.0f, 52.0f, 340.0f, 44.0f }, Justification::left, font (38.0f, 2).withExtraKerningFactor (0.2f), kAccent);
     // flèches + nom du preset
     for (auto r : { kPrevBtn, kNextBtn })

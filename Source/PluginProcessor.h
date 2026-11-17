@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "Engine/GuitarEngine.h"
 #include "Engine/Player.h"
+#include "SampleBank.h"
 
 class DGuitarProcessor : public juce::AudioProcessor
 {
@@ -52,6 +53,10 @@ public:
     float outputLevel() const { return engine.outputLevel(); }
     void copyScope (float* dest, int n) const;   // les n derniers échantillons (mono)
 
+    // vraies guitares (échantillons) : 0 aucun, 1 chargement, 2 prêtes, 3 introuvables
+    int sampleStatus() const { return bank.status(); }
+    bool usesSamples() const { return engineSamples.load(); }
+
     // joueur de rythmes (arpèges, grattements…) : 0 = jeu direct
     int getPattern() const;
     void setPattern (int p);
@@ -66,6 +71,9 @@ private:
     void applySettings();
 
     dguitar::Engine engine;
+    SampleBank bank;
+    std::atomic<bool> engineSamples { false };
+    int wantedSet() const;
     dguitar::Player player;
     struct EngineSink : dguitar::Player::Sink
     {

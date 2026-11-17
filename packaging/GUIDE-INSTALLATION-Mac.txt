@@ -1,4 +1,4 @@
-D-GUITAR 1.1.0 — Guitares électriques et acoustique
+D-GUITAR 1.2.0 — Guitares électriques et acoustique
 Guide d'installation et de prise en main (Mac)
 Créé et développé par Daniel Malaba — Studio Danova
 =====================================================
@@ -41,13 +41,23 @@ D-GUITAR est un INSTRUMENT (comme un synthé), pas un effet.
 
 3. COMMENT ÇA MARCHE
 --------------------
-4 guitares à modélisation physique (aucun sample) :
-  CLEAN    — son clair, cristallin, trémolo
-  DIVE     — son saturé, levier (la molette de pitch plonge la note)
-  CRY      — guitare qui pleure : jouez fort, la note monte comme un bend ;
-             vibrato de chanteur ; la molette MODULATION est la pédale wah
-  ACOUSTIC — guitare folk à cordes acier ; potards BODY, TONE, BRIGHT ;
-             la molette MODULATION étouffe les cordes avec la paume
+4 guitares :
+  CLEAN    — corde modélisée : son clair, cristallin, trémolo
+  DIVE     — vraie guitare électrique dans l'ampli saturé ; la molette MODULATION
+             fait trembler la note (vibrato de guitariste) ; la molette PITCH plonge (levier)
+  CRY      — guitare qui pleure : la note chante sans s'éteindre, vibrato de chanteur,
+             molette MODULATION = vibrato large ; jouez fort, la note monte comme un bend ;
+             WAH = le « ouah » à chaque attaque
+  ACOUSTIC — vraies guitares acoustiques : Folk (acier, médiator), Arpèges (acier, doigts),
+             Nylon ; potards BODY, TONE, BRIGHT ; la molette MODULATION étouffe (paume)
+
+LES VRAIES GUITARES (échantillons)
+  DIVE, CRY et ACOUSTIC lisent les fichiers .dgs du dossier « Samples » :
+    Téléchargements › D-Plugins › D-GUITAR › Samples
+  (ou Musique › Studio Danova › D-GUITAR › Samples). Ne pas renommer ces fichiers.
+  Au premier lancement, le Mac peut demander si Logic peut accéder au dossier
+  Téléchargements : répondez OK. En haut de l'écran du plugin :
+    VRAIE GUITARE = échantillons chargés ; SAMPLES ABSENTS = dossier introuvable.
 
 RYTHME (panneau en bas à gauche de la guitare)
   Choisissez un rythme avec les flèches, puis TENEZ UN ACCORD au clavier :

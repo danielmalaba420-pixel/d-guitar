@@ -1,21 +1,33 @@
 // Mesure le niveau de sortie de chaque guitare à chaque réglage de DRIVE et propose la table de compensation.
 #include "../Source/Engine/GuitarEngine.h"
 #include <cstdio>
+#include <string>
+#if defined(__SSE__) || defined(__x86_64__)
 #include <xmmintrin.h>
+#define DG_FTZ() _mm_setcsr (_mm_getcsr() | 0x8040)
+#else
+#define DG_FTZ() ((void) 0)
+#endif
 using namespace dguitar;
 int main()
 {
-    _mm_setcsr (_mm_getcsr() | 0x8040);
+    DG_FTZ();
     const int sr = 48000;
     double target = -22.0;   // dBFS RMS visé
     for (int gi = 0; gi < kNumGuitars; ++gi)
     {
-        target = voicing (gi).acoustic ? -34.0 : -22.0; std::printf ("{ // %s\n  ", voicing (gi).name);
+        target = voicing (gi).acoustic ? -27.0 : -22.0; std::printf ("{ // %s\n  ", voicing (gi).name);
         for (int k = 0; k <= 8; ++k)
         {
             Engine e; e.prepare (sr);
             Settings s; s.guitar = gi; s.drive = k / 8.0f; s.tone = 0.5f; s.wah = 0; s.delay = 0; s.chorus = 0; s.reverb = 0; s.volume = 0.75f;
             e.setSettings (s);
+            static SampleSet sets[4];
+            if (const char* dir = std::getenv ("SAMPLES"))
+            {
+                const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? "steel" : nullptr);
+                if (nm != nullptr && (sets[gi].name == nm || (sets[gi].load (std::string (dir) + "/" + nm + ".dgs") && ! (sets[gi].name = nm).empty()))) e.setSamples (&sets[gi]);
+            }
             const int per = sr; const int total = per * 6; double acc = 0; long cnt = 0;
             std::vector<float> L (128), R (128);
             const int notes[] = { 45, 52, 57, 64, 52, 59 };

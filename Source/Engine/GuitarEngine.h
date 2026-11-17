@@ -17,6 +17,7 @@
 #include <cstring>
 #include <vector>
 
+#include "SampleSet.h"
 #include "Sources.h"
 #include "Voicings.h"
 
@@ -26,6 +27,8 @@ static constexpr float kPi = 3.14159265358979f;
 static constexpr int kMaxBlock = 512;
 static constexpr float kAmpOut = 0.5f;     // niveau de sortie de l'ampli avant le volume
 static constexpr float kInputGain = 8.0f;
+static constexpr float kSampleGain = 0.09f;   // vraie guitare DI -> même niveau que la corde modélisée (mesuré)
+static constexpr float kAcSampleGain = 0.5f;
 static constexpr float kTriangle = 1.0f;     // amplitude du pincement triangulaire
 static constexpr float kPulseMix = 1.1f;    // part du « claquement » de médiator   // niveau « guitare » à l'entrée de l'ampli
 
@@ -329,6 +332,11 @@ struct StringVoice
     Line R, Lc;                 // R : sillet -> chevalet ; Lc : chevalet -> sillet
     float hexLp = 0.0f;         // filtre avant la saturation corde par corde
     float gTgt = 0.0f;          // perte visée : on y glisse doucement (un saut de perte fait un clic au micro)
+    // lecture d'échantillon
+    const SampleZone* zone = nullptr;
+    double spos = 0.0, rate = 1.0;
+    float damp = 1.0f, sgain = 1.0f, relEnv = 1.0f, relK = 1.0f, susRef = 0.0f, susG = 1.0f;
+    bool  oneShot = false;      // bruit de relâchement : joué tel quel
     bool active = false, gate = false, releasing = false, held = false;
     int note = -1;
     uint32_t age = 0;
@@ -357,7 +365,7 @@ struct StringVoice
     void init() { R.init (kLine); Lc.init (kLine); }
     void clear()
     {
-        R.clear(); Lc.clear(); lp1 = 0; ax1[0] = ax1[1] = ay1[0] = ay1[1] = 0; prevA = prevB = 0; env = 0; excN = excLen = 0; sq.reset();
+        zone = nullptr; spos = 0; relEnv = 1; damp = 1; susG = 1; oneShot = false; R.clear(); Lc.clear(); lp1 = 0; ax1[0] = ax1[1] = ay1[0] = ay1[1] = 0; prevA = prevB = 0; env = 0; excN = excLen = 0; sq.reset();
     }
 };
 
@@ -413,6 +421,22 @@ public:
         if (s.guitar != guitar) setGuitar (s.guitar);
         st = s;
         applySettings (false);
+    }
+
+    // jeu d'échantillons fourni par le plugin (nullptr = corde modélisée). Les voix en cours sont coupées.
+    void setSamples (const SampleSet* s)
+    {
+        if (s == samples) return;
+        samples = s;
+        for (auto& v : voices) { v.clear(); v.active = false; v.gate = false; }
+        held.clear(); pending.clear();
+        configure();
+    }
+    bool usingSamples() const
+    {
+        if (samples == nullptr || V->samples == 0) return false;
+        const bool elec = samples->name == "electric-di";
+        return V->samples == 1 ? elec : ! elec;
     }
 
     void setTempo (double bpm) { bpmHost = (float) std::max (40.0, std::min (240.0, bpm)); }
@@ -502,6 +526,10 @@ private:
 
     float sr = 48000.0f;
     float hexK = 0.3f;
+    const SampleSet* samples = nullptr;
+    int rrCount = 0;
+    Biquad acLow[2], acHigh[2], sideTone[2];
+    OnePole palmLp[2];
     int guitar = 0;
     const Voicing* V = &voicing (0);
     Settings st;
@@ -543,14 +571,15 @@ private:
     std::array<std::atomic<float>, 6> viz {};
     std::atomic<float> wahShown { 0.0f }, outLevel { 0.0f };
 
-    float monoBuf[kMaxBlock], sigL[kMaxBlock], sigR[kMaxBlock];
+    float monoBuf[kMaxBlock], sideBuf[kMaxBlock], sigL[kMaxBlock], sigR[kMaxBlock];
 
     //==========================================================================
     void configure()
     {
         hexK = 1.0f - std::exp (-2.0f * kPi * 3200.0f / sr);
         const Voicing& v = *V;
-        pkEq.lowpass (v.pkResHz, v.pkResQ, sr);
+        if (usingSamples()) pkEq.lowpass (std::min (v.pkResHz * 2.5f, sr * 0.42f), 0.6f, sr);   // le vrai micro est déjà dans l'enregistrement
+        else pkEq.lowpass (v.pkResHz, v.pkResQ, sr);
         // petite bosse de résonance, puis coupure naturelle
         midPre.peaking (900.0f, 0.8f, v.preMidDb, sr);
         preHp.highpass (80.0f, 0.7f, sr);
@@ -587,7 +616,7 @@ private:
         pg1 = std::pow (preGain, 0.55f);
         pg2 = std::pow (preGain, 0.30f) * 1.4f;
         pg3 = 1.0f + 0.5f * std::pow (preGain, 0.25f);
-        preHp.highpass (lerpf (70.0f, 170.0f, d), 0.7f, sr);
+        preHp.highpass (lerpf (70.0f, v.samples == 1 ? 115.0f : 170.0f, d), 0.7f, sr);   // vraie guitare : on garde le corps des graves
         // compensation de niveau : mesurée au banc d'essai (voir tests), approchée par une loi simple
         postGain = levelComp (d);
 
@@ -607,6 +636,13 @@ private:
             bodyF[3].peaking (420.0f, 4.0f, 0.0f * b, sr);
             bodyF[4].peaking (1100.0f, 1.2f, -2.0f * b, sr);  // creux « boîte »
             bodyF[5].peaking (3300.0f, 0.9f, 0.0f, sr);       // présence des cordes acier
+            for (int k = 0; k < 2; ++k)
+            {   // vraie guitare : BODY = chaleur (graves), BRIGHT = brillance des cordes
+                acLow[k].lowShelf (220.0f, (d - 0.5f) * 12.0f, sr);
+                acHigh[k].highShelf (3800.0f, (wahAmt - 0.5f) * 12.0f, sr);
+            }
+            sideTone[0].lowShelf (180.0f, -tn * 5.0f, sr);
+            sideTone[1].highShelf (2600.0f, tn * 14.0f, sr);
         }
         chDepth = clampf (st.chorus, 0, 1);
         chMix = 0.55f * chDepth;
@@ -641,6 +677,7 @@ private:
     {
         v.gate = false; v.releasing = true; v.held = false;
         v.releaseT = V->releaseMs * 0.001f;
+        if (v.zone != nullptr && ! v.oneShot) releaseNoise (v);
     }
 
     void quickKill (StringVoice& v, float seconds)
@@ -691,7 +728,9 @@ private:
                 for (auto& v : voices)
                     if (v.active && v.gate)
                     {
+                        if (v.zone != nullptr && std::abs (note - v.note) > 4) break;   // grand saut : on rejoue une vraie note
                         v.note = note; v.tgtSemi = (float) note; v.glideK = glideCoef (V->glideMs);
+                        if (v.zone != nullptr) return;   // glissé sur la même corde (slide)
                         // petit « hammer-on » : la corde est ré-énergisée en douceur
                         startExcitation (v, vel * 0.30f, true);
                         return;
@@ -726,8 +765,42 @@ private:
         }
         v->swellT = 0; v->swellLen = V->swellMs > 0 ? V->swellMs * 0.001f * sr * (1.25f - 0.5f * vel) : 0;
         v->hop = 0; v->life = 0;
+        if (usingSamples())
+        {
+            startSample (*v, vel);
+            return;
+        }
         retune (*v, true);
         startExcitation (*v, vel, false);
+    }
+
+    void startSample (StringVoice& v, float vel)
+    {
+        const SampleZone* z = samples->pick (v.note, vel, rrCount++);
+        if (z == nullptr) { v.active = false; return; }
+        v.zone = z; v.spos = 0.0; v.oneShot = false;
+        v.relEnv = 1.0f; v.susG = 1.0f; v.damp = 1.0f;
+        const float layer = (float) z->vel / 127.0f;
+        v.sgain = clampf (std::pow (vel / std::max (0.05f, layer), 1.2f), 0.25f, 1.15f) * (V->samples == 2 ? kAcSampleGain : kSampleGain);
+        v.susRef = z->envAt (0.15 * samples->sr);
+        v.rate = std::exp2 ((v.curSemi - (float) z->root) / 12.0f) * (double) samples->sr / sr;
+    }
+
+    // bruit de relâchement (doigts qui quittent les cordes) : guitare acoustique
+    void releaseNoise (const StringVoice& from)
+    {
+        if (! usingSamples() || V->samples != 2) return;
+        const SampleZone* z = samples->pick (from.note, 1.0f, 0, 1);
+        if (z == nullptr) return;
+        StringVoice* v = allocVoice();
+        if (v == nullptr || v == &from) return;
+        v->clear();
+        v->active = true; v->gate = false; v->releasing = false; v->held = false;
+        v->note = -1; v->age = ++ageCounter; v->vel = from.vel;
+        v->zone = z; v->oneShot = true; v->spos = 0.0;
+        v->sgain = 0.35f * (0.4f + 0.6f * from.vel) * kAcSampleGain;
+        v->curSemi = v->tgtSemi = (float) z->root;
+        v->rate = (double) samples->sr / sr;
     }
 
     void startExcitation (StringVoice& v, float amp, bool soft)
@@ -923,6 +996,76 @@ private:
     float lastPitchOffset = 0;
 
     //==========================================================================
+    // vraie guitare : lecture de l'échantillon (hauteur suivie en continu : bends, vibrato, glissés)
+    inline float sampleVoice (StringVoice& v, float& side)
+    {
+        const SampleZone& z = *v.zone;
+        side = 0.0f;
+        if (! v.oneShot)
+        {
+            if (v.curSemi != v.tgtSemi)
+            {
+                v.curSemi += (v.tgtSemi - v.curSemi) * v.glideK;
+                if (std::fabs (v.tgtSemi - v.curSemi) < 1.0e-4f) v.curSemi = v.tgtSemi;
+            }
+            if ((v.hop++ & 15) == 0)
+                v.rate = std::exp2 ((v.curSemi + pitchOffsetSemi - (float) z.root) / 12.0f) * (double) samples->sr / sr;
+        }
+        const bool loops = V->sustainer > 0.0f && z.loopEnd > 0 && ! v.oneShot;
+        if (loops && v.spos >= z.loopEnd) v.spos -= (double) (z.loopEnd - z.loopStart);
+        if (v.spos >= (double) (z.frames - 3)) { v.active = false; return 0.0f; }
+
+        auto read = [&] (double pos, int c)
+        {
+            const int i = (int) pos;
+            const float t = (float) (pos - i);
+            const float y0 = z.at (std::max (0, i - 1), c), y1 = z.at (i, c), y2 = z.at (i + 1, c), y3 = z.at (std::min (z.frames - 1, i + 2), c);
+            const float c1 = 0.5f * (y2 - y0), c2 = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3, c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+            return ((c3 * t + c2) * t + c1) * t + y1;
+        };
+        float L = read (v.spos, 0), R = z.ch > 1 ? read (v.spos, 1) : L;
+        if (loops && v.spos >= z.loopEnd - z.xfade)
+        {   // fondu enchaîné vers le début de la boucle (note tenue sans fin)
+            const double back = v.spos - (double) (z.loopEnd - z.loopStart);
+            const float t = (float) ((v.spos - (z.loopEnd - z.xfade)) / z.xfade);
+            const float a = std::sqrt (1.0f - t), b = std::sqrt (t);
+            L = L * a + read (back, 0) * b;
+            R = z.ch > 1 ? R * a + read (back, 1) * b : L;
+        }
+        v.spos += v.rate;
+
+        float g = v.sgain;
+        if (V->sustainer > 0.0f && ! v.oneShot && v.spos > 0.15 * samples->sr)
+        {   // « sustainer » : la note ne s'éteint pas, elle chante
+            const float want = std::min (30.0f, std::pow (v.susRef / z.envAt (std::min (v.spos, (double) (z.loopEnd > 0 ? z.loopEnd : z.frames)) ), V->sustainer));
+            v.susG += (std::max (1.0f, want) - v.susG) * 0.0005f;
+            g *= v.susG;
+        }
+        if (V->mod == ModMode::PalmMute && modS > 0.01f && ! v.oneShot)
+        {   // paume sur le chevalet : la note s'éteint vite
+            v.damp *= std::exp (-modS * 9.0f / sr);
+            g *= v.damp;
+        }
+        if (v.releasing)
+        {
+            v.relK = std::exp (-6.9f / (std::max (0.02f, v.releaseT) * sr));
+            v.relEnv *= v.relK;
+            if (v.relEnv < 1.0e-4f) { v.active = false; return 0.0f; }
+            g *= v.relEnv;
+        }
+        // volume swell
+        if (v.swellLen > 0.0f)
+        {
+            const float s = std::min (1.0f, v.swellT / v.swellLen);
+            g *= s * s * (3.0f - 2.0f * s);
+            v.swellT += 1.0f;
+        }
+        ++v.life;
+        side = 0.5f * (L - R) * g;
+        return 0.5f * (L + R) * g;
+    }
+
+    //==========================================================================
     void processChunk (float* outL, float* outR, int n)
     {
         const Voicing& v = *V;
@@ -958,26 +1101,29 @@ private:
                     const float t = clampf ((noteAge - v.autoVibDelay) / 0.5f, 0.0f, 1.0f);
                     cents += v.autoVibCents * t * t * (3.0f - 2.0f * t);
                 }
-                vibC = cents * (1.0f + 0.15f * 200.0f * w2) * std::sin (vibPh) * 0.01f;   // centièmes -> demi-tons
+                const float wave = v.vibUp ? 0.5f - 0.5f * std::cos (vibPh) : std::sin (vibPh);   // guitariste : la note monte et revient
+                vibC = cents * (1.0f + 0.15f * 200.0f * w2) * wave * 0.01f;   // centièmes -> demi-tons
             }
             lastPitchOffset = pitchOffsetSemi;
             pitchOffsetSemi = bs + vibC;
-            float acc = 0;
-            if (V->hex > 0.0f)
-            {   // saturation corde par corde (comme un micro hexaphonique) : chaque corde sature seule,
-                // les accords gardent leurs notes au lieu de produire des sons parasites d'intermodulation
-                const float h = V->hex, K = 22.0f, lpk = hexK;
-                for (auto& sv : voices)
-                    if (sv.active)
-                    {
-                        const float d = voiceSample (sv);
-                        sv.hexLp += (d - sv.hexLp) * lpk;
-                        acc += (1.0f - h) * d + h * std::tanh (sv.hexLp * K) * (1.6f / K);
-                    }
+            float acc = 0, side = 0;
+            const float h = V->hex, K = 22.0f, lpk = hexK;
+            for (auto& sv : voices)
+            {
+                if (! sv.active) continue;
+                float sd = 0.0f;
+                const float d = sv.zone != nullptr ? sampleVoice (sv, sd) : voiceSample (sv);
+                side += sd;
+                if (h > 0.0f)
+                {   // saturation corde par corde (comme un micro hexaphonique) : chaque corde sature seule,
+                    // les accords gardent leurs notes au lieu de produire des sons parasites d'intermodulation
+                    sv.hexLp += (d - sv.hexLp) * lpk;
+                    acc += (1.0f - h) * d + h * std::tanh (sv.hexLp * K) * (1.6f / K);
+                }
+                else acc += d;
             }
-            else
-                for (auto& sv : voices) if (sv.active) acc += voiceSample (sv);
             monoBuf[i] = acc;
+            sideBuf[i] = side;
         }
 
         // ---- niveau d'affichage des cordes (décroissance)
@@ -1016,9 +1162,10 @@ private:
                     // à chaque attaque la pédale s'ouvre (« ouah ») puis retombe lentement ; la molette prend ensuite la main
                     wahT += 8.0f / sr;
                     const float sw = (1.0f - std::exp (-wahT / 0.06f)) * std::exp (-wahT / 0.9f) * (1.0f / 0.78f);
-                    const float drive = clampf (v.wahAuto * sw * (1.0f - modS) + modS, 0.0f, 1.0f);
+                    const bool pedal = v.mod == ModMode::Wah || v.mod == ModMode::WahVibrato;
+                    const float drive = clampf (pedal ? v.wahAuto * sw * (1.0f - modS) + modS : v.wahAuto * sw, 0.0f, 1.0f);
                     float pos = v.wahBase + (1.0f - v.wahBase) * drive;
-                    if (v.mod != ModMode::Wah) pos += 0.3f * modS * (1.0f - v.wahBase);
+                    if (v.mod == ModMode::WahVibrato) pos += 0.3f * modS * (1.0f - v.wahBase);
                     wahPos = clampf (pos, 0.0f, 1.0f);
                 }
                 wahPosSm += (wahPos - wahPosSm) * 0.004f;
@@ -1043,10 +1190,26 @@ private:
 
         if (debugTap == 2) { for (int i = 0; i < n; ++i) { outL[i] = outR[i] = monoBuf[i]; } return; }
         // ---- guitare acoustique : caisse de résonance au lieu de l'ampli
-        if (v.acoustic)
+        if (v.acoustic && usingSamples())
+        {   // vraie guitare acoustique : stéréo des micros d'origine, BODY / TONE / BRIGHT en égaliseur doux
+            const float g = postGain * kAmpOut * 3.0f;
+            palmLp[0].setCutoff (v.mod == ModMode::PalmMute ? 14000.0f * (1.0f - 0.85f * modS) + 400.0f : 20000.0f, sr);
+            palmLp[1].a = palmLp[0].a;
+            for (int i = 0; i < n; ++i)
+            {
+                float x = acHigh[0].process (acLow[0].process (palmLp[0].lp (monoBuf[i] / kInputGain)));
+                x = toneHi.process (toneLo.process (x));
+                float sd = acHigh[1].process (acLow[1].process (palmLp[1].lp (sideBuf[i])));
+                sd = sideTone[1].process (sideTone[0].process (sd));
+                monoBuf[i] = dcOut.process (x) * g;
+                sideBuf[i] = sd * g;
+            }
+        }
+        else if (v.acoustic)
         {
             for (int i = 0; i < n; ++i)
             {
+                sideBuf[i] = 0.0f;
                 float x = bodyHp.process (monoBuf[i]);
                 for (int k = 0; k < 6; ++k) x = bodyF[k].process (x);
                 x = toneLo.process (x);
@@ -1059,6 +1222,7 @@ private:
         // ---- ampli : bosse de médiums, 2 étages à lampes (x4), tonalité, baffle
         for (int i = 0; i < n; ++i)
         {
+            sideBuf[i] = 0.0f;
             float x = preHp.process (monoBuf[i]);
             x = midPre.process (x);
             const float a1 = pg1, a2 = pg2, a3 = pg3, bias = stageBias;
@@ -1110,8 +1274,8 @@ private:
                 chPh2 += i2; if (chPh2 > 2.0f * kPi) chPh2 -= 2.0f * kPi;
                 const float wl = chL.tap (baseA + dep * std::sin (chPh1));
                 const float wr = chR.tap (baseB + dep * std::sin (chPh2 + 1.7f));
-                sigL[i] = x * (1.0f - 0.3f * chMix) + chMix * wl;
-                sigR[i] = x * (1.0f - 0.3f * chMix) + chMix * wr;
+                sigL[i] = x * (1.0f - 0.3f * chMix) + chMix * wl + sideBuf[i];
+                sigR[i] = x * (1.0f - 0.3f * chMix) + chMix * wr - sideBuf[i];
             }
         }
 

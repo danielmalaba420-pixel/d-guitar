@@ -69,6 +69,15 @@ void DGuitarProcessor::prepareToPlay (double sampleRate, int)
 }
 
 int DGuitarProcessor::getGuitar() const { return juce::jlimit (0, dguitar::kNumGuitars - 1, juce::roundToInt (pGuitar->load())); }
+// jeu d'échantillons voulu : DIVE et CRY = guitare électrique ; ACOUSTIC = acier (Folk), doigts (Arpèges), nylon
+int DGuitarProcessor::wantedSet() const
+{
+    const int g = getGuitar();
+    if (g == 1 || g == 2) return 1;
+    if (g == 3) return 2 + getPreset();
+    return 0;
+}
+
 int DGuitarProcessor::getPattern() const { return juce::jlimit (0, dguitar::numPatterns(), juce::roundToInt (pPattern->load())); }
 
 void DGuitarProcessor::setPattern (int p)
@@ -155,6 +164,8 @@ void DGuitarProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     if (buffer.getNumChannels() < 2 || total == 0) return;
 
     applySettings();
+    engine.setSamples (bank.audioFetch (wantedSet()));
+    engineSamples.store (engine.usingSamples());
     {
         const int pat = getPattern();
         if (pat != player.pattern())

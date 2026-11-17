@@ -1,10 +1,16 @@
 // Banc d'essai hors ligne : joue des phrases MIDI dans le moteur et écrit des WAV (48 kHz, 16 bits stéréo)
 #include "../Source/Engine/GuitarEngine.h"
 #include "../Source/Engine/Player.h"
+#include <memory>
 #include <cstdio>
 #include <string>
+#if defined(__SSE__) || defined(__x86_64__)
 #include <xmmintrin.h>
 #include <pmmintrin.h>
+#define DG_FTZ() _mm_setcsr (_mm_getcsr() | 0x8040)
+#else
+#define DG_FTZ() ((void) 0)
+#endif
 using namespace dguitar;
 
 struct Ev { double t; int type; int a; float b; };   // type 0 noteOn(a,b) 1 noteOff(a) 2 pitch(b) 3 mod(b) 4 sustain(a)
@@ -26,7 +32,7 @@ static void writeWav (const char* path, const std::vector<float>& L, const std::
 
 int main (int argc, char** argv)
 {
-    _mm_setcsr (_mm_getcsr() | 0x8040);
+    DG_FTZ();
     const int sr = std::getenv ("SR") ? std::atoi (std::getenv ("SR")) : 48000;
     // usage : render <guitare 0-5> <preset 0-2> <scénario> <sortie.wav> [durée]
     const int gi = std::atoi (argv[1]), pi = std::atoi (argv[2]);
@@ -43,6 +49,14 @@ int main (int argc, char** argv)
     if (argc > 7) { s.wah = std::atof (argv[7]); }
     if (std::getenv ("NOFX")) { s.delay = s.chorus = s.reverb = 0; }
     e.setSettings (s);
+    // SAMPLES=<dossier> : charge le jeu d'échantillons de la guitare (comme le plugin)
+    static SampleSet set;
+    if (const char* dir = std::getenv ("SAMPLES"))
+    {
+        const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? (pi == 1 ? "finger" : (pi == 2 ? "nylon" : "steel")) : nullptr);
+        if (nm != nullptr && set.load (std::string (dir) + "/" + nm + ".dgs")) { set.name = nm; e.setSamples (&set); }
+        std::fprintf (stderr, "samples %s : %s\n", nm ? nm : "-", e.usingSamples() ? "OK" : "non");
+    }
     if (std::getenv ("TAP")) e.debugTap = std::atoi (std::getenv ("TAP"));
 
     std::vector<Ev> ev;
@@ -64,6 +78,20 @@ int main (int argc, char** argv)
                 const double t0 = 0.05 + (r * 4 + c) * bar;
                 for (int k = 0; k < 3; ++k) { on (t0, ch[c][k], 0.82f); off (t0 + bar - 0.02, ch[c][k]); }
             }
+    }
+    else if (sc == "held")   // une note tenue 8 s, molette à fond de 3 à 6 s (vibrato)
+    {
+        on (0.1, 64, 0.9f); for (int i = 0; i <= 20; ++i) mod (3.0 + i * 0.05, i / 20.0f); mod (6.0, 0.0f); off (8.5, 64);
+    }
+    else if (sc == "lead")   // phrase de solo : notes liées, bend + vibrato, note qui chante longtemps
+    {
+        on (0.2, 64, 0.85f); off (0.7, 64); on (0.65, 67, 0.8f); off (1.1, 67); on (1.05, 69, 0.95f);
+        for (int i = 0; i <= 15; ++i) pit (1.5 + i * 0.02, i / 15.0f);                       // bend d'un ton
+        for (int i = 0; i <= 20; ++i) mod (1.9 + i * 0.05, i / 20.0f * 0.8f);                // vibrato sur le bend
+        mod (3.6, 0.0f); for (int i = 0; i <= 15; ++i) pit (3.6 + i * 0.03, 1.0f - i / 15.0f);  // relâche
+        off (4.2, 69); on (4.15, 72, 0.9f); off (4.6, 72); on (4.55, 74, 0.95f);
+        for (int i = 0; i <= 20; ++i) mod (5.2 + i * 0.05, i / 20.0f * 0.9f);
+        off (10.5, 74); mod (10.5, 0.0f);
     }
     else if (sc == "chord") { on (0.1, 52, 0.8f); on (0.1, 59, 0.8f); on (0.1, 64, 0.8f); on (0.1, 68, 0.8f); on (0.1, 71, 0.8f); off (3.0, 52); off (3.0, 59); off (3.0, 64); off (3.0, 68); off (3.0, 71); }
     else if (sc == "demo")
