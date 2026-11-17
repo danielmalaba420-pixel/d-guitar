@@ -158,7 +158,7 @@ void DGuitarEditor::buildStatic (float ps)
     g.setGradientFill (ColourGradient (Colour (0xffc9622a), 1410.0f, 856.0f, Colour (0x00c9622a), 960.0f, 856.0f, false));
     g.fillRect (960.0f, 856.0f, 450.0f, 1.0f);
     spaced (g, "D-GUITAR", { 640.0f, 836.0f, 320.0f, 40.0f }, Justification::centred, font (32.0f, 2).withExtraKerningFactor (0.34f), Colour (0xffe9dfd3));
-    spaced (g, String::fromUTF8 ("AU \xc2\xb7 VST3 \xc2\xb7 v1.3"), { 1340.0f, 836.0f, 216.0f, 40.0f }, Justification::right, font (14.0f, 1).withExtraKerningFactor (0.18f), kDim);
+    spaced (g, String::fromUTF8 ("AU \xc2\xb7 VST3 \xc2\xb7 v1.4"), { 1340.0f, 836.0f, 216.0f, 40.0f }, Justification::right, font (14.0f, 1).withExtraKerningFactor (0.18f), kDim);
 }
 
 //==============================================================================

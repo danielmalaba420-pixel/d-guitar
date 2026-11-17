@@ -526,7 +526,7 @@ private:
     struct Pending { int note; float vel; int delay; };
 
     float sr = 48000.0f;
-    float hexK = 0.3f, roundK = 2.0f;
+    float hexK = 0.3f, roundK = 2.0f, wahMixT = 1.0f, wahMixSm = 0.0f;
     const SampleSet* samples = nullptr;
 public:
     bool releaseNoises = true;   // bruits de doigts au relâchement (coupés pendant les arpèges/grattements)
@@ -1187,10 +1187,14 @@ private:
                     wahT += 8.0f / sr;
                     const float sw = (1.0f - std::exp (-wahT / 0.06f)) * std::exp (-wahT / 0.9f) * (1.0f / 0.78f);
                     const bool pedal = v.mod == ModMode::Wah || v.mod == ModMode::WahVibrato;
-                    const float drive = clampf (pedal ? v.wahAuto * sw * (1.0f - modS) + modS : v.wahAuto * sw, 0.0f, 1.0f);
+                    float expr = modS;
+                    if (v.mod == ModMode::WahVibrato)   // CRY : le « miaou » suit la molette ET les bends (la pédale s'ouvre quand la note monte)
+                        expr = std::max (modS, clampf (std::fabs (pitchOffsetSemi) * 0.5f, 0.0f, 1.0f));
+                    const float drive = clampf (pedal ? v.wahAuto * sw * (1.0f - expr) + expr : v.wahAuto * sw, 0.0f, 1.0f);
                     float pos = v.wahBase + (1.0f - v.wahBase) * drive;
-                    if (v.mod == ModMode::WahVibrato) pos += 0.3f * modS * (1.0f - v.wahBase);
                     wahPos = clampf (pos, 0.0f, 1.0f);
+                    // sans geste (molette au repos, pas de bend), la pédale disparaît : son de guitare naturel
+                    wahMixT = v.mod == ModMode::WahVibrato ? clampf (expr * 4.0f, 0.0f, 1.0f) : 1.0f;
                 }
                 wahPosSm += (wahPos - wahPosSm) * 0.004f;
                 const float x = monoBuf[i];
@@ -1202,7 +1206,9 @@ private:
                 wahSvf.process (x);
                 const float bpN = wahSvf.bp / v.wahQ;                 // passe-bande à gain 1 au centre
                 const float y = (0.45f * x + 3.4f * bpN) * 0.55f;     // pédale : bosse d'environ +11 dB qui glisse
-                monoBuf[i] = x * (1.0f - wahAmt) + y * wahAmt;
+                wahMixSm += (wahMixT - wahMixSm) * 0.002f;
+                const float wa = wahAmt * wahMixSm;
+                monoBuf[i] = x * (1.0f - wa) + y * wa;
             }
             wahShown.store (wahPosSm);
         }

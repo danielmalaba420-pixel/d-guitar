@@ -90,6 +90,18 @@ int main (int argc, char** argv)
         for (int i = 0; i <= 10; ++i) mod (6.0 + i * 0.03, i / 10.0f); mod (7.8, 0.0f); off (8.4, 69);
         on (8.9, 71, 0.9f); on (11.4, 68, 0.8f); off (11.45, 71); off (14.0, 68);
     }
+    else if (sc == "miaou")  // guitare douce ; « miaou » seulement avec la molette (monte/descend) puis avec un bend
+    {
+        on (0.3, 69, 0.75f); off (2.4, 69);
+        on (2.6, 72, 0.8f);
+        for (int i = 0; i <= 30; ++i) mod (3.2 + i * 0.03, std::sin (i / 30.0f * 3.14159f));        // miaou
+        for (int i = 0; i <= 30; ++i) mod (4.4 + i * 0.03, std::sin (i / 30.0f * 3.14159f) * 0.8f); // miaou
+        off (5.8, 72);
+        on (6.1, 69, 0.85f);
+        for (int i = 0; i <= 20; ++i) pit (6.7 + i * 0.02, i / 20.0f);          // bend d'un ton : la pédale s'ouvre avec
+        for (int i = 0; i <= 20; ++i) pit (7.6 + i * 0.03, 1.0f - i / 20.0f);
+        off (9.0, 69); on (9.3, 76, 0.8f); off (12.0, 76);
+    }
     else if (sc == "lead")   // phrase de solo : notes liées, bend + vibrato, note qui chante longtemps
     {
         on (0.2, 64, 0.85f); off (0.7, 64); on (0.65, 67, 0.8f); off (1.1, 67); on (1.05, 69, 0.95f);
