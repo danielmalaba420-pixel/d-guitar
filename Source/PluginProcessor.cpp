@@ -13,6 +13,7 @@ const char* const kKnobNames[dguitar::kNumKnobs] = { "Amp Drive", "Tone", "Wah",
 int DGuitarProcessor::presetPattern (int guitar, int preset)
 {
     if (guitar == 3) { const int m[3] = { 7, 2, 0 }; return m[juce::jlimit (0, 2, preset)]; }
+    if (guitar == 4) { const int m[3] = { 0, 2, 7 }; return m[juce::jlimit (0, 2, preset)]; }
     return 0;
 }
 
@@ -75,6 +76,7 @@ int DGuitarProcessor::wantedSet() const
     const int g = getGuitar();
     if (g == 1 || g == 2) return 1;
     if (g == 3) return 2 + getPreset();
+    if (g == 4) return 5;   // BLACK : guitare acier seule (Steel1)
     return 0;
 }
 
@@ -139,7 +141,7 @@ void DGuitarProcessor::selectPreset (int index)
     };
     set ("preset", (float) index);
     for (int i = 0; i < dguitar::kNumKnobs; ++i) set (kKnobIds[i], d.preset[index][i] / 100.0f);
-    if (getGuitar() == 3) set ("pattern", (float) presetPattern (3, index));
+    if (getGuitar() >= 3) set ("pattern", (float) presetPattern (getGuitar(), index));
 }
 
 void DGuitarProcessor::uiNote (int note, float velocity, bool on)

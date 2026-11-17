@@ -22,10 +22,10 @@ int main()
             Engine e; e.prepare (sr);
             Settings s; s.guitar = gi; s.drive = k / 8.0f; s.tone = 0.5f; s.wah = 0; s.delay = 0; s.chorus = 0; s.reverb = 0; s.volume = 0.75f;
             e.setSettings (s);
-            static SampleSet sets[4];
+            static SampleSet sets[8];
             if (const char* dir = std::getenv ("SAMPLES"))
             {
-                const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? "steel" : nullptr);
+                const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? "steel" : (gi == 4 ? "steel1" : nullptr));
                 if (nm != nullptr && (sets[gi].name == nm || (sets[gi].load (std::string (dir) + "/" + nm + ".dgs") && ! (sets[gi].name = nm).empty()))) e.setSamples (&sets[gi]);
             }
             const int per = sr; const int total = per * 6; double acc = 0; long cnt = 0;

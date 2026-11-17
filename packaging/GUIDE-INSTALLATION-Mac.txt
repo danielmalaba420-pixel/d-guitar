@@ -1,4 +1,4 @@
-D-GUITAR 1.4.0 — Guitares électriques et acoustique
+D-GUITAR 1.5.0 — Guitares électriques et acoustique
 Guide d'installation et de prise en main (Mac)
 Créé et développé par Daniel Malaba — Studio Danova
 =====================================================
@@ -41,7 +41,7 @@ D-GUITAR est un INSTRUMENT (comme un synthé), pas un effet.
 
 3. COMMENT ÇA MARCHE
 --------------------
-4 guitares :
+5 guitares :
   CLEAN    — corde modélisée : son clair, cristallin, trémolo
   DIVE     — vraie guitare électrique dans l'ampli saturé ; la molette MODULATION
              fait trembler la note (vibrato de guitariste) ; la molette PITCH plonge (levier)
@@ -51,6 +51,8 @@ D-GUITAR est un INSTRUMENT (comme un synthé), pas un effet.
              ou des bends à la molette PITCH ; le potard WAH en règle la force.
   ACOUSTIC — vraies guitares acoustiques : Folk (acier, médiator), Arpèges (acier, doigts),
              Nylon ; potards BODY, TONE, BRIGHT ; la molette MODULATION étouffe (paume)
+  BLACK    — 2ᵉ guitare acoustique (une seule guitare acier, attaques nettes) ;
+             presets Doux, Arpèges, Gratté ; mêmes potards que ACOUSTIC
 
 LES VRAIES GUITARES (échantillons)
   DIVE, CRY et ACOUSTIC lisent les fichiers .dgs du dossier « Samples » :

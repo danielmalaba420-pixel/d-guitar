@@ -101,6 +101,7 @@ int main (int argc, char** argv)
     if (! snapshot (proc, 2, 64, 0.8f, outDir.getChildFile ("ui-cry-80.png"))) ++failures;
 
     if (! snapshot (proc, 3, 52, 0.6f, outDir.getChildFile ("ui-acoustic.png"))) ++failures;
+    if (! snapshot (proc, 4, 52, 0.6f, outDir.getChildFile ("ui-black.png"))) ++failures;
 
     std::printf (failures == 0 ? "TOUT EST OK\n" : "%d ECHEC(S)\n", failures);
     return failures == 0 ? 0 : 1;

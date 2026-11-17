@@ -24,8 +24,8 @@ public:
 
     static const char* setName (int id)
     {
-        static const char* names[] = { "", "electric-di", "steel", "finger", "nylon" };
-        return names[juce::jlimit (0, 4, id)];
+        static const char* names[] = { "", "electric-di", "steel", "finger", "nylon", "steel1" };
+        return names[juce::jlimit (0, 5, id)];
     }
 
     // fil audio : quel jeu faut-il (0 = aucun) ; renvoie le jeu publié et confirme son utilisation

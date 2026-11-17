@@ -4,7 +4,7 @@
 
 namespace dguitar
 {
-static constexpr int kNumGuitars = 4;
+static constexpr int kNumGuitars = 5;
 static constexpr int kNumKnobs = 7;   // AMP DRIVE, TONE, WAH, DELAY, CHORUS, REVERB, VOLUME
 
 enum class ModMode { Vibrato, Wah, WahVibrato, Whammy, Tremolo, PalmMute };
@@ -113,6 +113,17 @@ static inline const Voicing& voicing (int i)
           { "Folk", "Arpèges", "Nylon" },
           { { 55, 55, 50, 15, 0, 30, 76 }, { 50, 60, 60, 30, 20, 45, 74 }, { 75, 40, 35, 10, 0, 25, 76 } },
           { -4.2, -4.6, -5.1, -5.5, -6.0, -6.6, -7.2, -7.8, -8.5 },
+          1.0f, -1.0f, 0.0f, 5.2f, 0.35f, true, 0.0f, 0.0f, 2 },
+        // ---------------------------------------------------------------- BLACK : 2ᵉ acoustique (une seule guitare acier, attaques nettes, sans notes parasites)
+        { "BLACK", false, false, 12, 0, 2, 2, 16,
+          5.5f, 4200, -0.08f, 0.17f, 4.0f, 0.01f, 240, 0, 0.0f,
+          0.97f, 1.0f, 0.5f, 0.0f, 9000, 0.7f,
+          ModMode::PalmMute, 0, 5.0f, 0.0f,
+          3.5f, 450, 2100, 0.3f, 0.0f, 0.0f,
+          0.0f, 0.0f, 0.0f, 0.0f, 70, 12000, 3000, 0.0f, 0.25f, 0.50f, 0.60f,
+          { "Doux", "Arpèges", "Gratté" },
+          { { 50, 50, 50, 15, 0, 35, 76 }, { 50, 58, 58, 25, 15, 45, 74 }, { 60, 52, 55, 10, 0, 28, 76 } },
+          { -3.5, -3.9, -4.3, -4.8, -5.2, -5.7, -6.3, -6.9, -7.6 },
           1.0f, -1.0f, 0.0f, 5.2f, 0.35f, true, 0.0f, 0.0f, 2 },
     };
     return v[i < 0 ? 0 : (i >= kNumGuitars ? kNumGuitars - 1 : i)];

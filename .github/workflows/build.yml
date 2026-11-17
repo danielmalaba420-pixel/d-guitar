@@ -33,7 +33,7 @@ jobs:
           rm -rf ~/Library/Audio/Plug-Ins/Components/D-GUITAR.component
       - name: Sign (ad-hoc) and package
         run: |
-          V=1.4.0
+          V=1.5.0
           A=build/DGUITAR_artefacts/Release
           mkdir -p dist/D-GUITAR-Mac
           cp -R "$A/AU/D-GUITAR.component" "$A/VST3/D-GUITAR.vst3" dist/D-GUITAR-Mac/
@@ -71,7 +71,7 @@ jobs:
           cd dist && ditto -c -k --sequesterRsrc --keepParent D-GUITAR-Mac D-GUITAR-$V-Mac.zip
       - name: Publish to builds-mac branch
         run: |
-          mkdir out && cp dist/D-GUITAR-1.4.0-Mac.zip out/ && cd out
+          mkdir out && cp dist/D-GUITAR-1.5.0-Mac.zip out/ && cd out
           echo "Commit ${GITHUB_SHA}" > BUILD.txt
           git init -q && git checkout -q -b builds-mac && git add .
           git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "Mac ${GITHUB_SHA::7}"

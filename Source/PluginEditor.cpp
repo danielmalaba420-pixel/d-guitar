@@ -45,6 +45,7 @@ DGuitarEditor::DGuitarEditor (DGuitarProcessor& p) : AudioProcessorEditor (&p), 
     guitars[1] = { "DIVE",  loadImg (BinaryData::dg_dive_png,  BinaryData::dg_dive_pngSize),  {}, 1517, 534, 900, 60, 14, 260, 270.4027f, -0.0027f, 10.9005f, 0.0069f, 238, 1225 };
     guitars[2] = { "CRY",   loadImg (BinaryData::dg_cry_png,   BinaryData::dg_cry_pngSize),   {}, 1532, 540, 880, 70, 16, 275, 270.1637f, -0.000654f, 11.2375f, 0.0067151f, 262, 1245 };
     guitars[3] = { "ACOUSTIC", loadImg (BinaryData::dg_acoustic_png, BinaryData::dg_acoustic_pngSize), {}, 1536, 507, 900, 60, 24, 330, 252.0f, -0.003f, 10.8f, 0.00444f, 285, 1230 };
+    guitars[4] = { "BLACK", loadImg (BinaryData::dg_black_png, BinaryData::dg_black_pngSize), {}, 1536, 507, 900, 60, 24, 330, 252.0f, -0.003f, 10.8f, 0.00444f, 285, 1230 };
     for (auto& g : guitars)
     {
         const Image small = g.img.rescaled (g.img.getWidth() / 4, g.img.getHeight() / 4, Graphics::highResamplingQuality);
@@ -70,7 +71,7 @@ Font DGuitarEditor::font (float h, int weight) const
 
 Rectangle<float> DGuitarEditor::slotRect (int i)
 {
-    const float w = (1512.0f - 3.0f * 16.0f) / 4.0f;
+    const float w = (1512.0f - 4.0f * 16.0f) / 5.0f;
     return { 44.0f + (float) i * (w + 16.0f), 134.0f, w, 96.0f };
 }
 
@@ -158,7 +159,7 @@ void DGuitarEditor::buildStatic (float ps)
     g.setGradientFill (ColourGradient (Colour (0xffc9622a), 1410.0f, 856.0f, Colour (0x00c9622a), 960.0f, 856.0f, false));
     g.fillRect (960.0f, 856.0f, 450.0f, 1.0f);
     spaced (g, "D-GUITAR", { 640.0f, 836.0f, 320.0f, 40.0f }, Justification::centred, font (32.0f, 2).withExtraKerningFactor (0.34f), Colour (0xffe9dfd3));
-    spaced (g, String::fromUTF8 ("AU \xc2\xb7 VST3 \xc2\xb7 v1.4"), { 1340.0f, 836.0f, 216.0f, 40.0f }, Justification::right, font (14.0f, 1).withExtraKerningFactor (0.18f), kDim);
+    spaced (g, String::fromUTF8 ("AU \xc2\xb7 VST3 \xc2\xb7 v1.5"), { 1340.0f, 836.0f, 216.0f, 40.0f }, Justification::right, font (14.0f, 1).withExtraKerningFactor (0.18f), kDim);
 }
 
 //==============================================================================
@@ -386,7 +387,7 @@ void DGuitarEditor::paint (Graphics& g)
 
     // choix des guitares
     const int cur = proc.getGuitar();
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < dguitar::kNumGuitars; ++i)
     {
         const auto r = slotRect (i);
         const bool on = i == cur;
@@ -420,7 +421,7 @@ void DGuitarEditor::paint (Graphics& g)
     {
         const auto a = knobArea (i);
         const char* lab = kLabels[i];
-        if (cur == 3 && i < 3) lab = kLabelsAc[i];
+        if (cur >= 3 && i < 3) lab = kLabelsAc[i];
         spaced (g, lab, a.withHeight (18.0f), Justification::centred, font (15.0f, 1).withExtraKerningFactor (0.18f), Colour (0xffc9a98c));
         drawKnob (g, i, a.getCentreX(), a.getY() + 18.0f + 6.0f + 50.0f);
     }
@@ -516,7 +517,7 @@ void DGuitarEditor::mouseDown (const MouseEvent& e)
 {
     const auto p = toDesign (e.position);
     drag = Drag::none;
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < dguitar::kNumGuitars; ++i)
         if (slotRect (i).contains (p)) { if (i != proc.getGuitar()) proc.selectGuitar (i); return; }
     if (kPrevBtn.expanded (4.0f).contains (p)) { proc.selectPreset (proc.getPreset() - 1); return; }
     if (kNextBtn.expanded (4.0f).contains (p)) { proc.selectPreset (proc.getPreset() + 1); return; }

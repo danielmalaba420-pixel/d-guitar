@@ -53,7 +53,7 @@ int main (int argc, char** argv)
     static SampleSet set;
     if (const char* dir = std::getenv ("SAMPLES"))
     {
-        const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? (pi == 1 ? "finger" : (pi == 2 ? "nylon" : "steel")) : nullptr);
+        const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? (pi == 1 ? "finger" : (pi == 2 ? "nylon" : "steel")) : (gi == 4 ? "steel1" : nullptr));
         if (nm != nullptr && set.load (std::string (dir) + "/" + nm + ".dgs")) { set.name = nm; e.setSamples (&set); }
         std::fprintf (stderr, "samples %s : %s\n", nm ? nm : "-", e.usingSamples() ? "OK" : "non");
     }
@@ -134,6 +134,7 @@ int main (int argc, char** argv)
             { on (0.2, 69, 0.8f); for (int i = 0; i <= 20; ++i) pit (0.9 + i * 0.03, i / 20.0f * 1.0f); off (3.0, 69); pit (3.0, 0.0f);
               on (3.1, 72, 0.9f); for (int i = 0; i <= 40; ++i) mod (3.3 + i * 0.05, 0.5f - 0.5f * std::cos (i * 0.314f)); on (5.0, 74, 0.8f); off (5.0, 72); off (6.6, 74);
               on (6.8, 67, 0.8f); on (7.5, 69, 0.8f); on (8.0, 72, 0.9f); off (9.6, 72); mod (6.8, 0.0f); break; }
+            case 4:
             case 3: // ACOUSTIC : arpèges (Do, La mineur) puis accord gratté
             { const int a1[] = { 48, 55, 60, 64, 67, 64, 60, 55 }, a2[] = { 45, 52, 57, 60, 64, 60, 57, 52 };
               for (int i = 0; i < 16; ++i) { const int nn = (i < 8 ? a1 : a2)[i % 8]; on (0.2 + i * 0.25, nn, 0.55f + 0.15f * (i % 4 == 0)); off (0.2 + i * 0.25 + 1.8, nn); }
