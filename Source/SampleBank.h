@@ -24,7 +24,7 @@ public:
 
     static const char* setName (int id)
     {
-        static const char* names[] = { "", "electric-di", "steel", "finger", "nylon", "steel1" };
+        static const char* names[] = { "", "electric-di", "steel", "finger", "nylon", "steel1", "slide-angelitus", "slide-piratas", "slide-ratones" };
         return names[juce::jlimit (0, 5, id)];
     }
 
@@ -43,7 +43,8 @@ public:
     {
         const auto sub = juce::String ("Studio Danova/D-GUITAR/Samples");
         const auto home = juce::File::getSpecialLocation (juce::File::userHomeDirectory);
-        return { home.getChildFile ("Downloads/D-Plugins/D-GUITAR/Samples"),   // dossier D-Plugins de Dan
+        return { juce::File ("/Library/Application Support/Studio Danova/D-GUITAR/Samples"),   // installateur (clients)
+                 home.getChildFile ("Downloads/D-Plugins/D-GUITAR/Samples"),   // dossier D-Plugins de Dan
                  juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile (sub),
                  juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (sub),
                  juce::File::getSpecialLocation (juce::File::commonApplicationDataDirectory).getChildFile (sub) };

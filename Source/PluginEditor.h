@@ -52,7 +52,7 @@ private:
     float scale = 0.8f;
 
     juce::Typeface::Ptr tfMed, tfSemi, tfBold, tfMono;
-    Guitar guitars[5];
+    Guitar guitars[dguitar::kNumGuitars];
 
     juce::Image staticImg;
     float staticScale = 0.0f;

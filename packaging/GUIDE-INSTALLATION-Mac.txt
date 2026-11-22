@@ -1,4 +1,4 @@
-D-GUITAR 1.5.0 — Guitares électriques et acoustique
+D-GUITAR 1.6.0 — Guitares électriques et acoustiques
 Guide d'installation et de prise en main (Mac)
 Créé et développé par Daniel Malaba — Studio Danova
 =====================================================
@@ -41,21 +41,25 @@ D-GUITAR est un INSTRUMENT (comme un synthé), pas un effet.
 
 3. COMMENT ÇA MARCHE
 --------------------
-5 guitares :
+6 guitares :
   CLEAN    — corde modélisée : son clair, cristallin, trémolo
   DIVE     — vraie guitare électrique dans l'ampli saturé ; la molette MODULATION
              fait trembler la note (vibrato de guitariste) ; la molette PITCH plonge (levier)
-  CRY      — guitare électrique douce et émotionnelle : la note chante, le vibrato arrive
-             tout seul, la note glisse vers le bas quand on la lâche.
-             Le « miaou » (wah) vient UNIQUEMENT de la molette MODULATION (avec un vibrato)
-             ou des bends à la molette PITCH ; le potard WAH en règle la force.
+  WORSHIP  — guitare électrique worship (style Hillsong) : son juste au bord de la
+             saturation, delay croche pointée, reverb « shimmer » ; presets Ambient, Lead, Rythme.
+             La molette MODULATION fait des montées de volume (swells) : plus elle est haute,
+             plus la note arrive lentement. Le 3ᵉ potard règle le SHIMMER.
   ACOUSTIC — vraies guitares acoustiques : Folk (acier, médiator), Arpèges (acier, doigts),
              Nylon ; potards BODY, TONE, BRIGHT ; la molette MODULATION étouffe (paume)
-  BLACK    — 2ᵉ guitare acoustique (une seule guitare acier, attaques nettes) ;
-             presets Doux, Arpèges, Gratté ; mêmes potards que ACOUSTIC
+  BLACK    — acoustique worship : guitare acier avec chorus et grande reverb ;
+             presets Worship, Ballade, Ambient ; mêmes potards que ACOUSTIC
+  CRY      — guitare slide (bottleneck) faite à partir des prises de Daniel ; presets Angelitus,
+             Piratas, Ratones ; tessiture La3–Do6. Gardez une note et jouez la suivante pour GLISSER
+             (le 3ᵉ potard, GLISSÉ, règle la vitesse) ; plusieurs touches ensemble = accord ;
+             molette MODULATION = vibrato ; la pédale de sustain fonctionne.
 
 LES VRAIES GUITARES (échantillons)
-  DIVE, CRY et ACOUSTIC lisent les fichiers .dgs du dossier « Samples » :
+  DIVE, ACOUSTIC, BLACK et CRY lisent les fichiers .dgs du dossier « Samples » :
     Téléchargements › D-Plugins › D-GUITAR › Samples
   (ou Musique › Studio Danova › D-GUITAR › Samples). Ne pas renommer ces fichiers.
   Au premier lancement, le Mac peut demander si Logic peut accéder au dossier
@@ -63,12 +67,16 @@ LES VRAIES GUITARES (échantillons)
     VRAIE GUITARE = échantillons chargés ; SAMPLES ABSENTS = dossier introuvable.
 
 RYTHME (panneau en bas à gauche de la guitare)
+  Par défaut le rythme est sur OFF : jeu normal, note par note.
   Choisissez un rythme avec les flèches, puis TENEZ UN ACCORD au clavier :
   D-GUITAR le joue comme un guitariste, calé sur le tempo de votre logiciel.
   Arpèges : classique, ballade, descendant, 12/8, rapide, Travis picking
-  Grattements : folk, pop, ballade, pop avec étouffés
+  Grattements : folk, pop, ballade, pop avec étouffés, rapide
+  CCM / Gospel / Praise : CCM grattement, CCM doux, gospel 12/8, gospel shuffle, praise rapide
   Autres : basse + accord, basse marchante, skank (reggae)
-  OFF = jeu normal, note par note. Fonctionne aussi avec CLEAN.
+  VITESSE : x1/2, x1 ou x2 (cliquez pour changer)
+  HUMAIN : de 0 % (machine, parfaitement en place) à 100 % (très libre, comme un vrai guitariste)
+  Fonctionne aussi avec CLEAN.
 
 Chaque guitare a 3 presets (flèches de l'écran du haut).
 Les 7 potards : AMP DRIVE, TONE, WAH, DELAY, CHORUS, REVERB, VOLUME.

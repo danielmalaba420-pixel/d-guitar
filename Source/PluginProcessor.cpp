@@ -10,11 +10,9 @@ const char* const kKnobNames[dguitar::kNumKnobs] = { "Amp Drive", "Tone", "Wah",
 }
 
 // rythme proposé par chaque preset (acoustique : Folk = grattement folk, Arpèges = arpège ballade, Chaleur = jeu direct)
-int DGuitarProcessor::presetPattern (int guitar, int preset)
+int DGuitarProcessor::presetPattern (int, int)
 {
-    if (guitar == 3) { const int m[3] = { 7, 2, 0 }; return m[juce::jlimit (0, 2, preset)]; }
-    if (guitar == 4) { const int m[3] = { 0, 2, 7 }; return m[juce::jlimit (0, 2, preset)]; }
-    return 0;
+    return 0;   // les rythmes (arpèges, grattements) restent désactivés par défaut : on les choisit soi-même
 }
 
 const char* DGuitarProcessor::knobId (int i) { return kKnobIds[juce::jlimit (0, dguitar::kNumKnobs - 1, i)]; }
@@ -36,6 +34,8 @@ APVTS::ParameterLayout DGuitarProcessor::createLayout()
     juce::StringArray pats { "OFF" };
     for (const auto& pd : dguitar::patterns()) pats.add (pd.name);
     layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "pattern", 1 }, "Rythme", pats, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "patspeed", 1 }, "Vitesse du rythme", juce::StringArray { "x1/2", "x1", "x2" }, 1));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "humanize", 1 }, "Humaniser", juce::NormalisableRange<float> (0.0f, 1.0f), 0.35f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "pitchbend", 1 }, "Pitch Bend", juce::NormalisableRange<float> (-1.0f, 1.0f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "mod", 1 }, "Modulation", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f, pct));
     return layout;
@@ -51,6 +51,8 @@ DGuitarProcessor::DGuitarProcessor()
     pPitch = apvts.getRawParameterValue ("pitchbend");
     pMod = apvts.getRawParameterValue ("mod");
     pPattern = apvts.getRawParameterValue ("pattern");
+    pPatSpeed = apvts.getRawParameterValue ("patspeed");
+    pHuman = apvts.getRawParameterValue ("humanize");
     sink.e = &engine;
 }
 
@@ -70,14 +72,27 @@ void DGuitarProcessor::prepareToPlay (double sampleRate, int)
 }
 
 int DGuitarProcessor::getGuitar() const { return juce::jlimit (0, dguitar::kNumGuitars - 1, juce::roundToInt (pGuitar->load())); }
-// jeu d'échantillons voulu : DIVE et CRY = guitare électrique ; ACOUSTIC = acier (Folk), doigts (Arpèges), nylon
+// jeu d'échantillons voulu : DIVE et WORSHIP = guitare électrique ; ACOUSTIC = acier (Folk), doigts (Arpèges), nylon
 int DGuitarProcessor::wantedSet() const
 {
     const int g = getGuitar();
     if (g == 1 || g == 2) return 1;
     if (g == 3) return 2 + getPreset();
     if (g == 4) return 5;   // BLACK : guitare acier seule (Steel1)
+    if (g == 5) return 6 + getPreset();   // CRY : tes prises de slide (Angelitus, Piratas, Ratones)
     return 0;
+}
+
+int DGuitarProcessor::getPatSpeed() const { return juce::jlimit (0, 2, juce::roundToInt (pPatSpeed->load())); }
+float DGuitarProcessor::getHuman() const { return pHuman->load(); }
+void DGuitarProcessor::setParamValue (const char* id, float v)
+{
+    if (auto* q = apvts.getParameter (id))
+    {
+        q->beginChangeGesture();
+        q->setValueNotifyingHost (q->convertTo0to1 (v));
+        q->endChangeGesture();
+    }
 }
 
 int DGuitarProcessor::getPattern() const { return juce::jlimit (0, dguitar::numPatterns(), juce::roundToInt (pPattern->load())); }
@@ -141,7 +156,7 @@ void DGuitarProcessor::selectPreset (int index)
     };
     set ("preset", (float) index);
     for (int i = 0; i < dguitar::kNumKnobs; ++i) set (kKnobIds[i], d.preset[index][i] / 100.0f);
-    if (getGuitar() >= 3) set ("pattern", (float) presetPattern (getGuitar(), index));
+    if (getGuitar() == 3 || getGuitar() == 4) set ("pattern", (float) presetPattern (getGuitar(), index));
 }
 
 void DGuitarProcessor::uiNote (int note, float velocity, bool on)
@@ -168,7 +183,7 @@ void DGuitarProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     applySettings();
     engine.setSamples (bank.audioFetch (wantedSet()));
     engineSamples.store (engine.usingSamples());
-    engine.releaseNoises = ! player.active();
+    engine.releaseNoises = false;
     {
         const int pat = getPattern();
         if (pat != player.pattern())
@@ -187,6 +202,8 @@ void DGuitarProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
                 if (auto q = pos->getPpqPosition()) { hostPlaying = true; ppq = *q; }
         }
     player.setHost (hostPlaying, ppq);
+    { const double sp[3] = { 0.5, 1.0, 2.0 }; player.setSpeed (sp[juce::jlimit (0, 2, juce::roundToInt (pPatSpeed->load()))]); }
+    player.setHuman (pHuman->load());
 
     // notes jouées à la souris
     {

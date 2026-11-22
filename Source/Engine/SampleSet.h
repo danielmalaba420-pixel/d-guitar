@@ -22,6 +22,8 @@ struct SampleZone
     std::vector<float> env;
     int envHop = 441;
     int loopStart = -1, loopEnd = -1, xfade = 0;
+    int relPos = 0;   // (slide) fin de la partie tenue : après, la queue naturelle (reverb, échos) de l'enregistrement
+    int attackPos = 0; // (slide) début de la partie tenue (après le glissé d'entrée de la prise)
 
     inline float at (int i, int c) const { return (float) pcm[(size_t) (i * ch + c)] * (1.0f / 32768.0f); }
     float envAt (double pos) const
@@ -57,6 +59,11 @@ struct SampleSet
                 uint32_t len = 0;
                 if (std::fread (b, 1, 8, f) != 8 || std::fread (&len, 4, 1, f) != 1) { ok = false; break; }
                 z.root = b[0]; z.vel = b[1]; z.rr = b[2]; z.ch = std::max (1, (int) b[3]); z.kind = b[4];
+                {   // 18 bits : fin de la partie tenue ; 6 bits : glissé d'entrée (pas de 10 ms)
+                    const int packed = (int) b[5] | ((int) b[6] << 8) | ((int) b[7] << 16);
+                    z.relPos = packed & 0x3FFFF;
+                    z.attackPos = (packed >> 18) * (int) (hdr[0] / 100);
+                }
                 z.frames = (int) len;
                 z.pcm.resize ((size_t) len * (size_t) z.ch);
                 if (std::fread (z.pcm.data(), 2, z.pcm.size(), f) != z.pcm.size()) { ok = false; break; }
@@ -126,14 +133,17 @@ private:
         // boucle : la dernière seconde avant le fondu final, longueur = nombre entier de périodes
         const double f0 = 440.0 * std::pow (2.0, (z.root - 69) / 12.0);
         const int period = (int) std::lround (sr / f0);
-        const int end = z.frames - (int) (0.16 * sr);
+        const int end = z.relPos > 0 && z.relPos < z.frames ? z.relPos - (int) (0.02 * sr) : z.frames - (int) (0.16 * sr);
         int len = std::max (period, (int) std::lround (0.9 * sr / period) * period);
-        if (end - len > (int) (0.6 * sr))
-        {
-            z.loopEnd = end;
-            z.loopStart = end - len;
-            z.xfade = std::min (len / 3, (int) (0.06 * sr));
+        if (end - len <= (int) (0.6 * sr))
+        {   // note courte (phrases de slide) : boucle plus courte, pour que la note tenue ne s'éteigne pas
+            len = std::max (period, (int) std::lround (0.28 * sr / period) * period);
+            if (end - len <= (int) (0.20 * sr)) len = std::max (period, (int) std::lround (0.15 * sr / period) * period);
+            if (end - len <= (int) (0.10 * sr)) return;
         }
+        z.loopEnd = end;
+        z.loopStart = end - len;
+        z.xfade = std::min (len / 3, (int) (0.06 * sr));
     }
 };
 } // namespace dguitar

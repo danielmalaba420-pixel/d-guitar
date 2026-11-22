@@ -48,12 +48,20 @@ int main (int argc, char** argv)
     if (argc > 6) { s.drive = std::atof (argv[6]); }
     if (argc > 7) { s.wah = std::atof (argv[7]); }
     if (std::getenv ("NOFX")) { s.delay = s.chorus = s.reverb = 0; }
+    // réglages forcés (recherche des effets) : DL, RV, CH, DR, TN, GL entre 0 et 1
+    if (const char* q = std::getenv ("DL")) s.delay = (float) std::atof (q);
+    if (const char* q = std::getenv ("RV")) s.reverb = (float) std::atof (q);
+    if (const char* q = std::getenv ("CH")) s.chorus = (float) std::atof (q);
+    if (const char* q = std::getenv ("DR")) s.drive = (float) std::atof (q);
+    if (const char* q = std::getenv ("TN")) s.tone = (float) std::atof (q);
+    if (const char* q = std::getenv ("GL")) s.wah = (float) std::atof (q);
     e.setSettings (s);
+    if (const char* q = std::getenv ("BPM")) e.setTempo (std::atof (q));
     // SAMPLES=<dossier> : charge le jeu d'échantillons de la guitare (comme le plugin)
     static SampleSet set;
     if (const char* dir = std::getenv ("SAMPLES"))
     {
-        const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? (pi == 1 ? "finger" : (pi == 2 ? "nylon" : "steel")) : (gi == 4 ? "steel1" : nullptr));
+        const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? (pi == 1 ? "finger" : (pi == 2 ? "nylon" : "steel")) : (gi == 4 ? "steel1" : (gi == 5 ? (pi == 1 ? "slide-piratas" : (pi == 2 ? "slide-ratones" : "slide-angelitus")) : nullptr)));
         if (nm != nullptr && set.load (std::string (dir) + "/" + nm + ".dgs")) { set.name = nm; e.setSamples (&set); }
         std::fprintf (stderr, "samples %s : %s\n", nm ? nm : "-", e.usingSamples() ? "OK" : "non");
     }
@@ -90,6 +98,17 @@ int main (int argc, char** argv)
         for (int i = 0; i <= 10; ++i) mod (6.0 + i * 0.03, i / 10.0f); mod (7.8, 0.0f); off (8.4, 69);
         on (8.9, 71, 0.9f); on (11.4, 68, 0.8f); off (11.45, 71); off (14.0, 68);
     }
+    else if (sc == "worship")   // nappes en swell (molette) puis mélodie avec le delay croche pointée
+    {
+        mod (0.0, 0.8f);
+        const int c1[3] = { 52, 59, 64 }, c2[3] = { 48, 55, 64 };
+        for (int k = 0; k < 3; ++k) { on (0.2, c1[k], 0.7f); off (3.6, c1[k]); }
+        for (int k = 0; k < 3; ++k) { on (3.8, c2[k], 0.7f); off (7.2, c2[k]); }
+        mod (7.3, 0.0f);
+        const int mel[6] = { 76, 74, 71, 74, 76, 79 };
+        for (int i = 0; i < 6; ++i) { on (7.6 + i * 0.5, mel[i], 0.8f); off (7.6 + i * 0.5 + 0.45, mel[i]); }
+        on (10.6, 76, 0.85f); off (12.5, 76);
+    }
     else if (sc == "miaou")  // guitare douce ; « miaou » seulement avec la molette (monte/descend) puis avec un bend
     {
         on (0.3, 69, 0.75f); off (2.4, 69);
@@ -111,6 +130,23 @@ int main (int argc, char** argv)
         off (4.2, 69); on (4.15, 72, 0.9f); off (4.6, 72); on (4.55, 74, 0.95f);
         for (int i = 0; i <= 20; ++i) mod (5.2 + i * 0.05, i / 20.0f * 0.9f);
         off (10.5, 74); mod (10.5, 0.0f);
+    }
+    else if (sc == "ev")   // événements lus dans un fichier (EVFILE) : « temps type note valeur » (0 = on, 1 = off, 2 = pitch, 3 = mod)
+    {
+        if (FILE* f = std::fopen (std::getenv ("EVFILE"), "r"))
+        {
+            double tt; int ty, nn; float vv;
+            while (std::fscanf (f, "%lf %d %d %f", &tt, &ty, &nn, &vv) == 4) ev.push_back ({ tt, ty, nn, vv });
+            std::fclose (f);
+        }
+    }
+    else if (sc == "slide")   // CRY : phrase de slide en La : notes liées qui glissent (bottleneck), notes rejouées, vibrato à la molette
+    {
+        on (0.3, 69, 0.8f); on (1.4, 71, 0.8f); off (1.45, 69); on (1.9, 73, 0.85f); off (1.95, 71);
+        for (int i = 0; i <= 16; ++i) mod (2.5 + i * 0.04, i / 16.0f * 0.7f); mod (3.4, 0.0f); off (3.5, 73);
+        on (3.8, 76, 0.9f); on (5.3, 73, 0.8f); off (5.35, 76); off (6.0, 73);
+        on (6.3, 66, 0.75f); on (6.9, 69, 0.8f); off (6.95, 66); off (8.2, 69);
+        on (8.5, 64, 0.85f); for (int i = 0; i <= 20; ++i) mod (9.3 + i * 0.05, i / 20.0f * 0.8f); mod (11.6, 0.0f); off (11.8, 64);
     }
     else if (sc == "chord") { on (0.1, 52, 0.8f); on (0.1, 59, 0.8f); on (0.1, 64, 0.8f); on (0.1, 68, 0.8f); on (0.1, 71, 0.8f); off (3.0, 52); off (3.0, 59); off (3.0, 64); off (3.0, 68); off (3.0, 71); }
     else if (sc == "demo")
@@ -165,9 +201,9 @@ int main (int argc, char** argv)
     std::vector<float> L ((size_t) total), R ((size_t) total);
     // PAT=n : le joueur de rythmes reçoit les notes (tempo BPM, 90 par défaut)
     Player pl; pl.prepare (sr);
-    struct S : Player::Sink { Engine* e; double* t = nullptr; void strike (int n, float v) override { if (std::getenv ("TRACE")) std::printf ("%.3f %d %.2f\n", *t, n, v); e->strike (n, v); } void release (int n) override { e->noteOff (n); } } sk; sk.e = &e; double tnow = 0; sk.t = &tnow;
+    struct S : Player::Sink { Engine* e; double* t = nullptr; void strike (int n, float v) override { if (std::getenv ("TRACE")) std::printf ("%.3f %d %.2f\n", *t, n, v); e->strike (n, v); } void release (int n) override { e->noteOff (n); } void strikeSoft (int n, float v, float ms) override { e->strikeSoft (n, v, ms); } void scrape (float v, bool u, float ms) override { if (! std::getenv ("NOSCRAPE")) e->scrape (v, u, ms); } } sk; sk.e = &e; double tnow = 0; sk.t = &tnow;
     const int patN = std::getenv ("PAT") ? std::atoi (std::getenv ("PAT")) : 0;
-    pl.setPattern (patN); e.releaseNoises = patN == 0; pl.setTempo (std::getenv ("BPM") ? std::atof (std::getenv ("BPM")) : 90.0);
+    pl.setPattern (patN); e.releaseNoises = false; pl.setSpeed (std::getenv ("SPEED") ? std::atof (std::getenv ("SPEED")) : 1.0); pl.setHuman (std::getenv ("HUMAN") ? (float) std::atof (std::getenv ("HUMAN")) : 0.35f); pl.setTempo (std::getenv ("BPM") ? std::atof (std::getenv ("BPM")) : 90.0);
     size_t ei = 0; int pos = 0; const int blk = patN > 0 ? 32 : 128;
     while (pos < total)
     {
@@ -178,6 +214,7 @@ int main (int argc, char** argv)
             if (x.type == 0) { if (patN) pl.noteOn (x.a, x.b, sk); else e.noteOn (x.a, x.b); }
             else if (x.type == 1) { if (patN) pl.noteOff (x.a, sk); else e.noteOff (x.a); }
             else if (x.type == 2) e.pitchWheel (x.b); else if (x.type == 3) e.modWheel (x.b);
+            else if (x.type == 4) e.sustain (x.a != 0);
         }
         tnow = (double) pos / sr; if (patN) pl.advance (n, sk);
         e.process (L.data() + pos, R.data() + pos, n);

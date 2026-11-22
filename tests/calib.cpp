@@ -22,15 +22,16 @@ int main()
             Engine e; e.prepare (sr);
             Settings s; s.guitar = gi; s.drive = k / 8.0f; s.tone = 0.5f; s.wah = 0; s.delay = 0; s.chorus = 0; s.reverb = 0; s.volume = 0.75f;
             e.setSettings (s);
-            static SampleSet sets[8];
+            static SampleSet sets[10];
             if (const char* dir = std::getenv ("SAMPLES"))
             {
-                const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? "steel" : (gi == 4 ? "steel1" : nullptr));
+                const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? "steel" : (gi == 4 ? "steel1" : (gi == 5 ? "slide-angelitus" : nullptr)));
                 if (nm != nullptr && (sets[gi].name == nm || (sets[gi].load (std::string (dir) + "/" + nm + ".dgs") && ! (sets[gi].name = nm).empty()))) e.setSamples (&sets[gi]);
             }
             const int per = sr; const int total = per * 6; double acc = 0; long cnt = 0;
             std::vector<float> L (128), R (128);
-            const int notes[] = { 45, 52, 57, 64, 52, 59 };
+            const int notesStd[] = { 45, 52, 57, 64, 52, 59 }, notesCry[] = { 64, 69, 72, 76, 69, 67 };   // CRY : dans sa tessiture (La3..Do6)
+            const int* notes = gi == 5 ? notesCry : notesStd;
             for (int pos = 0; pos < total; pos += 128)
             {
                 const int step = pos / per;

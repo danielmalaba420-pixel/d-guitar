@@ -59,6 +59,9 @@ public:
 
     // joueur de rythmes (arpèges, grattements…) : 0 = jeu direct
     int getPattern() const;
+    int getPatSpeed() const;
+    float getHuman() const;
+    void setParamValue (const char* id, float v);
     void setPattern (int p);
     int patternSteps() const { return player.numSteps(); }
     int patternCurrent() const { return player.currentStep(); }
@@ -79,9 +82,13 @@ private:
     {
         dguitar::Engine* e = nullptr;
         void strike (int note, float vel) override { e->strike (note, vel); }
+        void strikeSoft (int note, float vel, float ms) override { e->strikeSoft (note, vel, ms); }
+        void scrape (float vel, bool up, float ms) override { e->scrape (vel, up, ms); }
         void release (int note) override { e->noteOff (note); }
     } sink;
     std::atomic<float>* pPattern = nullptr;
+    std::atomic<float>* pPatSpeed = nullptr;
+    std::atomic<float>* pHuman = nullptr;
     std::atomic<float>* pGuitar = nullptr;
     std::atomic<float>* pPreset = nullptr;
     std::atomic<float>* pKnob[dguitar::kNumKnobs] {};

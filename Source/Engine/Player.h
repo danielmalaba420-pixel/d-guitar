@@ -28,9 +28,9 @@ struct PatternDef
     const char* steps;
 };
 
-inline const std::array<PatternDef, 13>& patterns()
+inline const std::array<PatternDef, 19>& patterns()
 {
-    static const std::array<PatternDef, 13> p { {
+    static const std::array<PatternDef, 19> p { {
         { "ARPEGE CLASSIQUE",   2, "B! 3 4 5 6 5 4 3" },
         { "ARPEGE BALLADE",     4, "B! . 4 5 6 . 5 4 A . 4 5 6 . 5 4" },
         { "ARPEGE DESCENDANT",  2, "B! 6 5 4 A 6 5 4" },
@@ -44,6 +44,12 @@ inline const std::array<PatternDef, 13>& patterns()
         { "BASSE + ACCORD",     2, "B! . T . A . T ." },
         { "BASSE MARCHANTE",    2, "W! T W T W T W U" },
         { "SKANK",              2, ". K . K! . K . K" },
+        { "CCM GRATTEMENT",     4, "D! . d u . u D u D . d u . u D u" },
+        { "CCM DOUX",           2, "D! . . U . U D U" },
+        { "GOSPEL 12/8",        3, "D! u d D u d D! u d D u d" },
+        { "GOSPEL SHUFFLE",     3, "D! . U X . U D! . U X . U" },
+        { "GRATTEMENT RAPIDE",  4, "D! u d u D u d u D! u d u D u d u" },
+        { "PRAISE RAPIDE",      4, "d u d u D! u d u d u d u D! u d u" },
     } };
     return p;
 }
@@ -59,6 +65,10 @@ public:
         virtual ~Sink() = default;
         virtual void strike (int note, float vel) = 0;
         virtual void release (int note) = 0;
+        // attaque adoucie (le médiator brosse la corde au lieu de la pincer) : softMs = durée de montée
+        virtual void strikeSoft (int note, float vel, float /*softMs*/) { strike (note, vel); }
+        // bruit du médiator qui racle les cordes pendant un grattement
+        virtual void scrape (float /*vel*/, bool /*up*/, float /*durMs*/) {}
     };
 
     enum Kind : uint8_t { kRest, kDown, kDownL, kUp, kUpL, kTop, kChuck, kSkank, kBass, kAlt, kWalk, kStr };
@@ -87,6 +97,10 @@ public:
     int pattern() const { return pat; }
     bool active() const { return pat > 0; }
 
+    // vitesse du motif (0,5 = moitié, 2 = deux fois plus vite) et humanisation (0..1 : décalages, nuances, main moins régulière)
+    void setSpeed (double x) { speed = std::max (0.25, std::min (4.0, x)); }
+    void setHuman (float h) { human = std::max (0.0f, std::min (1.0f, h)); }
+
     void setTempo (double bpm) { tempo = std::max (40.0, std::min (240.0, bpm)); }
     void setHost (bool isPlaying, double ppq) { hostPlaying = isPlaying; hostPpq = ppq; }
 
@@ -105,7 +119,7 @@ public:
             else
             {
                 started = true;
-                const double st = beat * div;
+                const double st = beat * div * speed;
                 const double frac = st - std::floor (st);
                 if (frac < 0.4) { stepIdx = (int) std::floor (st) - 1; startDelay = (int) (0.010 * sr); }
                 else startDelay = 0;
@@ -167,7 +181,7 @@ public:
         if (! started || pat == 0 || held.empty() || steps.empty()) return;
         if (startDelay > 0) { startDelay -= n; if (startDelay > 0) return; }
 
-        const int idx = (int) std::floor (beat * div + 1.0e-6);
+        const int idx = (int) std::floor (beat * div * speed + 1.0e-6);
         if (idx != stepIdx)
         {
             // en mode libre, un pas manqué (bloc trop long) n'est pas rattrapé : on joue le dernier
@@ -197,7 +211,7 @@ public:
 
 private:
     struct Held { int note; float vel; };
-    struct Event { int when; int note; float vel; bool on; int str; };
+    struct Event { int when; int note; float vel; bool on; int str; float soft = 0.0f; };
 
     static int pcOf (int n) { return ((n % 12) + 12) % 12; }
 
@@ -301,19 +315,19 @@ private:
     {
         rng = rng * 1664525u + 1013904223u;
         const float r = ((float) (rng >> 9) / 8388608.0f) * 2.0f - 1.0f;
-        return std::max (0.05f, std::min (1.0f, base * (1.0f + 0.06f * r)));
+        return std::max (0.05f, std::min (1.0f, base * (1.0f + (0.02f + 0.22f * human) * r)));
     }
     int jitter (float ms)
     {
         rng = rng * 1664525u + 1013904223u;
-        return (int) ((float) (rng >> 9) / 8388608.0f * ms * 0.001f * (float) sr);
+        return (int) ((float) (rng >> 9) / 8388608.0f * ms * (0.3f + 5.0f * human) * 0.001f * (float) sr);
     }
 
-    void schedule (int when, int note, float v, bool on, int str)
+    void schedule (int when, int note, float v, bool on, int str, float soft = 0.0f)
     {
         if (note < 0) return;
-        if (when <= 0 && on) { fire ({ 0, note, v, true, str }, *sinkNow); return; }
-        queue.push_back ({ std::max (1, when), note, v, on, str });
+        if (when <= 0 && on) { fire ({ 0, note, v, true, str, soft }, *sinkNow); return; }
+        queue.push_back ({ std::max (1, when), note, v, on, str, soft });
     }
 
     void fire (const Event& e, Sink& s)
@@ -321,7 +335,7 @@ private:
         if (e.on)
         {
             if (e.str >= 0 && ringing[(size_t) e.str] >= 0 && ringing[(size_t) e.str] != e.note) s.release (ringing[(size_t) e.str]);
-            s.strike (e.note, e.vel);
+            if (e.soft > 0.0f) s.strikeSoft (e.note, e.vel, e.soft); else s.strike (e.note, e.vel);
             if (e.str >= 0) ringing[(size_t) e.str] = e.note;
         }
         else
@@ -331,25 +345,49 @@ private:
         }
     }
 
-    // grattement : les cordes partent l'une après l'autre (le médiator traverse l'accord)
+    // grattement : les cordes partent l'une après l'autre (le médiator traverse l'accord).
+    // Ce qui rend un grattement naturel :
+    //  - la traversée dure moins longtemps quand on gratte vite (sinon les coups se chevauchent et « bavent »)
+    //  - le médiator brosse les cordes : attaque un peu adoucie, surtout pour les coups légers et les montées
+    //  - le bruit du médiator qui racle les cordes
+    //  - la main ne touche pas toujours toutes les cordes, et les montées sont plus légères sur les graves
+    float rnd01() { rng = rng * 1664525u + 1013904223u; return (float) (rng >> 9) / 8388608.0f; }
+
     void strum (int from, int to, float v, float spreadMs, bool shortChord, int muteAfterMs)
     {
         const int dir = to >= from ? 1 : -1;
+        int count = 0;
+        for (int st = from;; st += dir) { if (voicing[(size_t) st] >= 0) ++count; if (st == to) break; }
+        if (count == 0) return;
+        // durée d'un pas du motif : la traversée n'en prend qu'une part
+        const double stepMs = 60000.0 / (tempo * div * speed);
+        const float maxTotal = (float) std::max (6.0, std::min (60.0, stepMs * 0.32));
+        float per = count > 1 ? std::min (spreadMs, maxTotal / (float) (count - 1)) : 0.0f;
+        per *= 1.0f + human * (rnd01() - 0.5f) * 0.5f;   // chaque coup de main est un peu différent
+        const bool up = dir < 0;
+        const float soft = (up ? 2.5f : 1.2f) + 4.0f * std::max (0.0f, 0.8f - v);
         int t = jitter (3.0f);
         int k = 0;
+        float total = 0.0f;
         for (int st = from;; st += dir)
         {
             const int n = voicing[(size_t) st];
             if (n >= 0)
             {
-                const float vv = humanVel (v * (1.0f - 0.04f * (float) k));
-                schedule (t, n, vv, true, st);
+                // la première corde touchée sonne le plus ; en montée, les graves à peine effleurées
+                float w = 1.0f - 0.05f * (float) k;
+                if (up && st <= 2) w *= 0.7f;
+                const float vv = humanVel (v * w);
+                schedule (t, n, vv, true, st, soft + rnd01() * 1.5f);
                 if (shortChord) schedule (t + (int) (muteAfterMs * 0.001 * sr), n, 0.0f, false, st);
-                t += (int) (spreadMs * (0.8f + 0.4f * ((float) (k % 3) / 2.0f)) * 0.001 * sr);
+                const float d = per * (0.85f + 0.3f * rnd01());
+                t += (int) (d * 0.001f * (float) sr);
+                total += d;
                 ++k;
             }
             if (st == to) break;
         }
+        if (sinkNow != nullptr) sinkNow->scrape (v, up, total + 18.0f);
     }
 
     int walkNote()
@@ -372,11 +410,12 @@ private:
         {
             switch (h.k)
             {
-                case kDown:  strum (bass, top, base * 0.95f, 9.0f, false, 0); break;
-                case kDownL: strum (std::max (bass, 2), top, base * 0.55f, 7.0f, false, 0); break;
-                case kUp:    strum (top, 2, base * 0.72f, 7.0f, false, 0); break;
-                case kUpL:   strum (top, 3, base * 0.45f, 6.0f, false, 0); break;
-                case kTop:   strum (2, top, base * 0.80f, 7.0f, false, 0); break;
+                case kDown:  // coup accentué : toute la main ; sinon on ne touche pas toujours la basse
+                    strum (st.accent || rnd01() < 0.4f ? bass : std::min (bass + 1, 2), top - (rnd01() < 0.15f * human ? 1 : 0), base * 0.85f, 9.0f, false, 0); break;
+                case kDownL: strum (std::max (bass + 1, 2), top, base * 0.50f, 7.0f, false, 0); break;
+                case kUp:    strum (top, rnd01() < 0.5f ? 2 : 3, base * 0.62f, 7.0f, false, 0); break;
+                case kUpL:   strum (top, 3, base * 0.40f, 6.0f, false, 0); break;
+                case kTop:   strum (2, top, base * 0.75f, 7.0f, false, 0); break;
                 case kChuck:
                     // coup étouffé : la main retombe sur les cordes, on n'entend que le claquement
                     for (int k = 0; k < 6; ++k) if (ringing[(size_t) k] >= 0) { s.release (ringing[(size_t) k]); ringing[(size_t) k] = -1; }
@@ -407,7 +446,8 @@ private:
     int sinceChange = 1 << 30, pendingStep = -1;
     int settle() const { return (int) (0.03 * sr); }
     int pat = 0, div = 2, stepIdx = -1, startDelay = 0, releaseCountdown = -1, bassString = 0, walkIdx = 0;
-    float vel = 0.8f;
+    float vel = 0.8f, human = 0.35f;
+    double speed = 1.0;
     uint32_t rng = 0x2468aceu;
     std::vector<Held> held;
     std::vector<Step> steps;
