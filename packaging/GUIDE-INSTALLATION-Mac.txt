@@ -1,4 +1,4 @@
-D-GUITAR 1.6.1 — Guitares électriques et acoustiques
+D-GUITAR 1.6.2 — Guitares électriques et acoustiques
 Guide d'installation et de prise en main (Mac)
 Créé et développé par Daniel Malaba — Studio Danova
 =====================================================

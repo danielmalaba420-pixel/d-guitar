@@ -83,6 +83,21 @@ int main (int argc, char** argv)
         if (! ok) ++failures;
     }
 
+    // 2b) chaque guitare / preset charge le bon fichier d'échantillons (le plugin lit exactement ces noms)
+    {
+        const char* expect[6][3] = { { "", "", "" }, { "electric-di", "electric-di", "electric-di" }, { "electric-di", "electric-di", "electric-di" },
+                                     { "steel", "finger", "nylon" }, { "steel1", "steel1", "steel1" }, { "pad-angelitus", "pad-piratas", "pad-ratones" } };
+        bool ok = true;
+        for (int g = 0; g < dguitar::kNumGuitars; ++g)
+            for (int p = 0; p < 3; ++p)
+            {
+                const juce::String got (SampleBank::setName (dguitar::wantedSampleSet (g, p)));
+                if (got != expect[g][p]) { ok = false; std::printf ("  guitare %d preset %d : %s (attendu %s)\n", g, p, got.toRawUTF8(), expect[g][p]); }
+            }
+        std::printf ("fichiers d'echantillons par guitare/preset : %s\n", ok ? "OK" : "FAIL");
+        if (! ok) ++failures;
+    }
+
     // 3) état sauvegardé / rechargé
     {
         proc.selectGuitar (2);

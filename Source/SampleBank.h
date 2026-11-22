@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 #include "Engine/SampleSet.h"
+#include "Engine/SampleNames.h"
 
 class SampleBank : private juce::Thread
 {
@@ -22,11 +23,7 @@ public:
         published.store (nullptr);
     }
 
-    static const char* setName (int id)
-    {
-        static const char* names[] = { "", "electric-di", "steel", "finger", "nylon", "steel1", "pad-angelitus", "pad-piratas", "pad-ratones" };
-        return names[juce::jlimit (0, 5, id)];
-    }
+    static const char* setName (int id) { return dguitar::sampleSetName (id); }
 
     // fil audio : quel jeu faut-il (0 = aucun) ; renvoie le jeu publié et confirme son utilisation
     const dguitar::SampleSet* audioFetch (int wantedId)

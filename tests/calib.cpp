@@ -1,4 +1,5 @@
 // Mesure le niveau de sortie de chaque guitare à chaque réglage de DRIVE et propose la table de compensation.
+#include "../Source/Engine/SampleNames.h"
 #include "../Source/Engine/GuitarEngine.h"
 #include <cstdio>
 #include <string>
@@ -25,7 +26,7 @@ int main()
             static SampleSet sets[10];
             if (const char* dir = std::getenv ("SAMPLES"))
             {
-                const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? "steel" : (gi == 4 ? "steel1" : (gi == 5 ? "pad-angelitus" : nullptr)));
+                const char* nm0 = sampleSetName (wantedSampleSet (gi, 0)); const char* nm = *nm0 ? nm0 : nullptr;   // même choix que le plugin
                 if (nm != nullptr && (sets[gi].name == nm || (sets[gi].load (std::string (dir) + "/" + nm + ".dgs") && ! (sets[gi].name = nm).empty()))) e.setSamples (&sets[gi]);
             }
             const int per = sr; const int total = per * 6; double acc = 0; long cnt = 0;

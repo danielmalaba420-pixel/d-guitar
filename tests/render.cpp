@@ -1,4 +1,5 @@
 // Banc d'essai hors ligne : joue des phrases MIDI dans le moteur et écrit des WAV (48 kHz, 16 bits stéréo)
+#include "../Source/Engine/SampleNames.h"
 #include "../Source/Engine/GuitarEngine.h"
 #include "../Source/Engine/Player.h"
 #include <memory>
@@ -61,7 +62,7 @@ int main (int argc, char** argv)
     static SampleSet set;
     if (const char* dir = std::getenv ("SAMPLES"))
     {
-        const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? (pi == 1 ? "finger" : (pi == 2 ? "nylon" : "steel")) : (gi == 4 ? "steel1" : (gi == 5 ? (pi == 1 ? "pad-piratas" : (pi == 2 ? "pad-ratones" : "pad-angelitus")) : nullptr)));
+        const char* nm0 = sampleSetName (wantedSampleSet (gi, pi)); const char* nm = *nm0 ? nm0 : nullptr;   // même choix que le plugin
         if (nm != nullptr && set.load (std::string (dir) + "/" + nm + ".dgs")) { set.name = nm; e.setSamples (&set); }
         std::fprintf (stderr, "samples %s : %s\n", nm ? nm : "-", e.usingSamples() ? "OK" : "non");
     }

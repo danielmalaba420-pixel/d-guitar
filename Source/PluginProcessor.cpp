@@ -75,15 +75,7 @@ void DGuitarProcessor::prepareToPlay (double sampleRate, int)
 
 int DGuitarProcessor::getGuitar() const { return juce::jlimit (0, dguitar::kNumGuitars - 1, juce::roundToInt (pGuitar->load())); }
 // jeu d'échantillons voulu : DIVE et WORSHIP = guitare électrique ; ACOUSTIC = acier (Folk), doigts (Arpèges), nylon
-int DGuitarProcessor::wantedSet() const
-{
-    const int g = getGuitar();
-    if (g == 1 || g == 2) return 1;
-    if (g == 3) return 2 + getPreset();
-    if (g == 4) return 5;   // BLACK : guitare acier seule (Steel1)
-    if (g == 5) return 6 + getPreset();   // CRY : tes prises de slide (Angelitus, Piratas, Ratones)
-    return 0;
-}
+int DGuitarProcessor::wantedSet() const { return dguitar::wantedSampleSet (getGuitar(), getPreset()); }
 
 int DGuitarProcessor::getPatSpeed() const { return juce::jlimit (0, 2, juce::roundToInt (pPatSpeed->load())); }
 float DGuitarProcessor::getHuman() const { return pHuman->load(); }
