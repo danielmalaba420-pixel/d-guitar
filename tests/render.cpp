@@ -43,7 +43,10 @@ int main (int argc, char** argv)
 
     Engine e; e.prepare (sr);
     Settings s; s.guitar = gi;
-    const auto& v = voicing (gi);
+    const bool prise = std::getenv ("PRISE") != nullptr;   // CRY : mode PRISE (sinon NOTES, comme le plugin par défaut)
+    s.cryPrise = prise;
+    s.preset = pi;
+    const auto& v = voicing (voicingIndex (gi, prise));
     s.drive = v.preset[pi][0] / 100; s.tone = v.preset[pi][1] / 100; s.wah = v.preset[pi][2] / 100;
     s.delay = v.preset[pi][3] / 100; s.chorus = v.preset[pi][4] / 100; s.reverb = v.preset[pi][5] / 100; s.volume = v.preset[pi][6] / 100;
     if (argc > 6) { s.drive = std::atof (argv[6]); }
@@ -62,7 +65,7 @@ int main (int argc, char** argv)
     static SampleSet set;
     if (const char* dir = std::getenv ("SAMPLES"))
     {
-        const char* nm0 = sampleSetName (wantedSampleSet (gi, pi)); const char* nm = *nm0 ? nm0 : nullptr;   // même choix que le plugin
+        const char* nm0 = sampleSetName (wantedSampleSet (gi, pi, prise)); const char* nm = *nm0 ? nm0 : nullptr;   // même choix que le plugin
         if (nm != nullptr && set.load (std::string (dir) + "/" + nm + ".dgs")) { set.name = nm; e.setSamples (&set); }
         std::fprintf (stderr, "samples %s : %s\n", nm ? nm : "-", e.usingSamples() ? "OK" : "non");
     }

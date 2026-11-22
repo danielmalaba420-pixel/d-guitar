@@ -38,6 +38,7 @@ struct SampleSet
 {
     std::string name;
     bool pad = false;   // « DGP1 » : une prise entière par tonalité (CRY) : boucle longue, fondu déjà cuit dans la prise
+    bool notes = false; // « DGN1 » : CRY mode notes : note seule (0), accord tenu (2), corde électrique (3) ; boucle cuite
     int sr = 44100;
     std::vector<SampleZone> zones;
     float peakEnv = 1.0f;
@@ -48,11 +49,12 @@ struct SampleSet
         if (f == nullptr) return false;
         char magic[4];
         uint32_t hdr[2];
-        bool ok = std::fread (magic, 1, 4, f) == 4 && magic[0] == 'D' && magic[1] == 'G' && (magic[2] == 'S' || magic[2] == 'P') && magic[3] == '1'
+        bool ok = std::fread (magic, 1, 4, f) == 4 && magic[0] == 'D' && magic[1] == 'G' && (magic[2] == 'S' || magic[2] == 'P' || magic[2] == 'N') && magic[3] == '1'
                   && std::fread (hdr, 4, 2, f) == 2;
         if (ok)
         {
             pad = magic[2] == 'P';
+            notes = magic[2] == 'N';
             sr = (int) hdr[0];
             zones.resize (hdr[1]);
             for (auto& z : zones)
@@ -63,7 +65,7 @@ struct SampleSet
                 z.root = b[0]; z.vel = b[1]; z.rr = b[2]; z.ch = std::max (1, (int) b[3]); z.kind = b[4];
                 {   // 18 bits : fin de la partie tenue ; 6 bits : glissé d'entrée (pas de 10 ms)
                     const int packed = (int) b[5] | ((int) b[6] << 8) | ((int) b[7] << 16);
-                    if (pad) z.relPos = packed;   // prise par tonalité : début de boucle (choisi à la fabrication)
+                    if (pad || notes) z.relPos = packed;   // début de boucle (choisi à la fabrication), 0 = pas de boucle
                     else
                     {
                         z.relPos = packed & 0x3FFFF;
@@ -134,6 +136,13 @@ private:
                 for (int j = std::max (0, b - 15); j < std::min (nb, b + 16); ++j) { s += e[(size_t) j]; ++k; }
                 z.env[(size_t) b] = (float) (s / std::max (1, k));
             }
+        }
+        if (notes)
+        {   // CRY mode notes : boucle cuite à la fabrication (note seule, accord tenu) ; la corde électrique s'éteint seule
+            if (z.relPos > 0 && z.relPos < z.frames - sr / 2) { z.loopStart = z.relPos; z.loopEnd = z.frames - sr / 20; }
+            else { z.loopStart = z.loopEnd = -1; }
+            z.xfade = 0;
+            return;
         }
         if (z.kind != 0) return;
         if (pad)

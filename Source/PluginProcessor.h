@@ -62,6 +62,9 @@ public:
     int getPatSpeed() const;
     float getHuman() const;
     bool getNoises() const;
+    bool getCryPrise() const;                 // CRY : mode PRISE (une prise par tonalité) ; sinon NOTES
+    void setCryPrise (bool prise);
+    const dguitar::Voicing& currentVoicing() const;   // voicing réellement joué (CRY : NOTES ou PRISE)
     void setParamValue (const char* id, float v);
     void setPattern (int p);
     int patternSteps() const { return player.numSteps(); }
@@ -91,6 +94,7 @@ private:
     std::atomic<float>* pPatSpeed = nullptr;
     std::atomic<float>* pHuman = nullptr;
     std::atomic<float>* pNoises = nullptr;
+    std::atomic<float>* pCryPrise = nullptr;
     std::atomic<float>* pGuitar = nullptr;
     std::atomic<float>* pPreset = nullptr;
     std::atomic<float>* pKnob[dguitar::kNumKnobs] {};

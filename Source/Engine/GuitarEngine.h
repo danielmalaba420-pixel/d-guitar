@@ -321,6 +321,8 @@ struct CabFir
 struct Settings
 {
     int   guitar = 0;
+    bool  cryPrise = false;   // CRY : mode PRISE (une prise entière par tonalité) ; sinon mode NOTES (comme un piano)
+    int   preset = 0;         // preset choisi (CRY NOTES : 1 = Aurore, slide au goulot de bouteille)
     float drive = 0.2f, tone = 0.55f, wah = 0.0f, delay = 0.4f, chorus = 0.3f, reverb = 0.6f, volume = 0.75f;   // 0..1
 };
 
@@ -339,6 +341,11 @@ struct StringVoice
     float damp = 1.0f, sgain = 1.0f, relEnv = 1.0f, relK = 1.0f, susRef = 0.0f, susG = 1.0f;
     bool  oneShot = false;      // bruit de relâchement : joué tel quel
     bool  noLoop = false;       // (CRY) note relâchée : on quitte la boucle et on joue la queue naturelle de la prise
+    int   layer = 0;            // (CRY NOTES) 0 = note seule, 2 = accord (son slide), 3 = accord (corde électrique)
+    // (AURORE) mouvement de la bouteille : trajectoire de la main (S, léger dépassement puis retour) + bruit de contact
+    float slFrom = 0, slTo = 0, slT = 0, slLen = 0, slOver = 0, prevSemiN = 0, buzzPh = 0;
+    SVF fric;
+    float lastOut = 0, lastSide = 0;   // dernier échantillon sorti (anti-clic quand la voix est réutilisée)
     float padFadeT = 0, padFadeLen = 0; bool padSine = false;   // (CRY) fondus à puissance constante entre tonalités
     bool active = false, gate = false, releasing = false, held = false;
     int note = -1;
@@ -368,7 +375,7 @@ struct StringVoice
     void init() { R.init (kLine); Lc.init (kLine); }
     void clear()
     {
-        zone = nullptr; spos = 0; relEnv = 1; damp = 1; rt[0] = rt[1] = rt[2] = rt[3] = 0; rtA = 1; susG = 1; oneShot = false; noLoop = false; padFadeT = padFadeLen = 0; padSine = false; R.clear(); Lc.clear(); lp1 = 0; ax1[0] = ax1[1] = ay1[0] = ay1[1] = 0; prevA = prevB = 0; env = 0; excN = excLen = 0; sq.reset();
+        zone = nullptr; spos = 0; relEnv = 1; damp = 1; rt[0] = rt[1] = rt[2] = rt[3] = 0; rtA = 1; susG = 1; oneShot = false; noLoop = false; layer = 0; slLen = 0; slT = 0; slOver = 0; buzzPh = 0; fric.reset(); padFadeT = padFadeLen = 0; padSine = false; R.clear(); Lc.clear(); lp1 = 0; ax1[0] = ax1[1] = ay1[0] = ay1[1] = 0; prevA = prevB = 0; env = 0; excN = excLen = 0; sq.reset();
     }
 };
 
@@ -376,7 +383,7 @@ struct StringVoice
 class Engine
 {
 public:
-    Engine() { voices.resize (16); }
+    Engine() { voices.resize (32); }
 
     void prepare (double sampleRate)
     {
@@ -404,16 +411,17 @@ public:
         reverb.reset();
         compEnv = 0; compGain = 1; wahEnv = 0; wahPos = 0; wahAmt = 0;
         bendS = 0; modS = 0; vibPh = 0; tremPh = 0; chPh1 = 0; chPh2 = 0.37f; wowPh = 0;
-        limiter = 1.0f;
+        limiter = 1.0f; declickM = declickS = 0.0f;
         for (auto& a : viz) a.store (0.0f);
     }
 
     void setGuitar (int g, bool force = false)
     {
         g = std::max (0, std::min (g, kNumGuitars - 1));
-        if (g == guitar && ! force) return;
-        guitar = g;
-        V = &voicing (g);
+        const int vi = voicingIndex (g, st.cryPrise);
+        if (g == guitar && vi == vIndex && ! force) return;
+        guitar = g; vIndex = vi;
+        V = &voicing (vi);
         for (auto& v : voices) { v.clear(); v.active = false; v.gate = false; }
         held.clear(); pending.clear();
         for (int& h : padHeld) h = 0;
@@ -422,8 +430,9 @@ public:
 
     void setSettings (const Settings& s)
     {
-        if (s.guitar != guitar) setGuitar (s.guitar);
+        const bool modeChanged = s.cryPrise != st.cryPrise;
         st = s;
+        if (s.guitar != guitar || modeChanged) setGuitar (s.guitar);
         applySettings (false);
     }
 
@@ -440,6 +449,9 @@ public:
     bool usingSamples() const
     {
         if (samples == nullptr || V->samples == 0) return false;
+        if (V->samples == 4) return samples->pad;     // CRY PRISE : seulement un jeu « une prise par tonalité »
+        if (V->samples == 5) return samples->notes;   // CRY NOTES : seulement un jeu « notes »
+        if (samples->pad || samples->notes) return false;
         const bool elec = samples->name == "electric-di";
         return V->samples == 1 ? elec : ! elec;
     }
@@ -450,6 +462,8 @@ public:
     void noteOn (int note, float velocity)
     {
         velocity = clampf (velocity, 0.02f, 1.0f);
+        if (V->samples >= 4 && ! usingSamples()) return;   // CRY sans ses prises (chargement en cours, fichiers absents) : rien plutôt qu'un faux son
+        if (V->samples == 5) { notesNoteOn (note, velocity); return; }
         if (V->mono)
         {
             doNoteOn (note, velocity, 0);
@@ -468,7 +482,12 @@ public:
     }
 
     // note jouée tout de suite, sans l'étalement automatique (utilisé par le joueur de rythmes)
-    void strike (int note, float velocity) { doNoteOn (note, clampf (velocity, 0.02f, 1.0f), 0); }
+    void strike (int note, float velocity)
+    {
+        if (V->samples >= 4 && ! usingSamples()) return;
+        if (V->samples == 5) { notesNoteOn (note, clampf (velocity, 0.02f, 1.0f)); return; }   // CRY NOTES : accords reconnus
+        doNoteOn (note, clampf (velocity, 0.02f, 1.0f), 0);
+    }
 
     // note de grattement : attaque adoucie (le médiator brosse la corde)
     void strikeSoft (int note, float velocity, float softMs)
@@ -557,7 +576,7 @@ public:
     }
 
 private:
-    struct Pending { int note; float vel; int delay; };
+    struct Pending { int note; float vel; int delay; bool chord = false; };
 
     float sr = 48000.0f;
     float hexK = 0.3f, roundK = 2.0f, wahMixT = 1.0f, wahMixSm = 0.0f;
@@ -569,7 +588,7 @@ private:
     int rrCount = 0;
     Biquad acLow[2], acHigh[2], sideTone[2], acPres[2], acAir[2];
     OnePole palmLp[2];
-    int guitar = 0;
+    int guitar = 0, vIndex = 0;
     const Voicing* V = &voicing (0);
     Settings st;
     std::vector<StringVoice> voices;
@@ -577,7 +596,8 @@ private:
     std::vector<Pending> pending;
     bool sustainDown = false;
     uint32_t ageCounter = 0;
-    uint64_t clock = 0, lastOnClock = 0, lastOnCry = 0;
+    uint64_t clock = 0, lastOnClock = 0, lastOnCry = 0, notesGroupStart = 0;
+    int notesIdx = 0, notesFirst = 0; float notesFirstVel = 0.8f;
     int strumIdx = 0;
     Rng rngUi;
     float bpmHost = 100.0f;
@@ -585,7 +605,7 @@ private:
     // contrôleurs lissés
     float bendTgt = 0, bendS = 0, modTgt = 0, modS = 0;
     Rng vrng; float w1 = 0, w2 = 0;
-    float vibPh = 0, tremPh = 0, chPh1 = 0, chPh2 = 0.37f, wowPh = 0;
+    float vibPh = 0, tremPh = 0, chPh1 = 0, chPh2 = 0.37f, wowPh = 0, dblPh = 0.4f;
 
     // chaîne
     Biquad pkEq, midPre, preHp, toneLo, toneHi, cabFilt[5], dcOut, stage2Hp;
@@ -603,6 +623,7 @@ private:
     float padXfade = 2.0f;            // CRY : fondu enchaîné entre deux tonalités (s), 3ᵉ potard FONDU
     int padHeld[12] = {};   // CRY : vitesse du glissé (3ᵉ potard), chaleur de lampe (DRIVE)
     float limiter = 1.0f;
+    float declickM = 0.0f, declickS = 0.0f, declickK = 0.99f;   // anti-clic des voix réutilisées
     Line chL, chR, dlA, dlB;
     OnePole dlFbA, dlFbB, dlHpA, dlHpB;
     float dlTime = 0.45f * 48000.0f, dlTimeSm = 0.45f * 48000.0f, dlFb = 0.3f, dlWet = 0.3f;
@@ -619,6 +640,7 @@ private:
     void configure()
     {
         hexK = 1.0f - std::exp (-2.0f * kPi * 3200.0f / sr);
+        declickK = std::exp (-1.0f / (0.003f * sr));
         const Voicing& v = *V;
         if (usingSamples()) pkEq.lowpass (std::min (v.pkResHz * 2.5f, sr * 0.42f), 0.6f, sr);   // le vrai micro est déjà dans l'enregistrement
         else pkEq.lowpass (v.pkResHz, v.pkResQ, sr);
@@ -667,7 +689,9 @@ private:
         toneHi.highShelf (2600.0f, tn * 14.0f, sr);
 
         wahAmt = (v.shimmerKnob || v.glideKnob) ? 0.0f : clampf (st.wah, 0, 1);   // WORSHIP : ce potard règle le shimmer ; CRY : le glissé
-        glideMsNow = v.glideKnob ? lerpf (25.0f, 420.0f, std::pow (clampf (st.wah, 0, 1), 1.4f)) : v.glideMs;
+        glideMsNow = v.glideKnob ? (v.samples == 5 ? 3.0f + 27.0f * std::pow (clampf (st.wah, 0, 1) / 0.49f, 2.0f)   // NOTES : 49 % = 30 ms (démo validée)
+                                                   : lerpf (25.0f, 420.0f, std::pow (clampf (st.wah, 0, 1), 1.4f)))
+                                 : v.glideMs;
         padXfade = lerpf (0.1f, 8.0f, std::pow (clampf (st.wah, 0, 1), 2.0f));
         slideSat = 0.01f + 90.0f * d * d;   // DRIVE à 0 : la prise passe intacte
         roundK = lerpf (1.15f, 3.2f, clampf (st.tone, 0.0f, 1.0f));
@@ -704,12 +728,12 @@ private:
         dlWet = 0.62f * clampf (st.delay, 0, 1);
         outGain = std::pow (clampf (st.volume, 0, 1) / 0.75f, 1.6f);
 
-        const float rvMix = 0.55f * clampf (st.reverb, 0, 1);
-        const int sig = (int) (rvMix * 1000.0f) + 1000 * guitar + (v.shimmerKnob ? 1000000 * (int) (st.wah * 100.0f) : 0);
+        const float rvMix = (v.samples == 5 ? 0.75f : 0.55f) * clampf (st.reverb, 0, 1);   // CRY NOTES : la grande ambiance de tes prises
+        const int sig = (int) (rvMix * 1000.0f) + 1000 * vIndex + (v.shimmerKnob ? 1000000 * (int) (st.wah * 100.0f) : 0);
         if (sig != lastRvSig || force)
         {
             lastRvSig = sig;
-            auto rp = dreverb::makeParams (6, v.rvSpace, 0.45f, v.rvTone, 0.0f, rvMix);
+            auto rp = dreverb::makeParams (v.rvSource, v.rvSpace, 0.45f, v.rvTone, 0.0f, rvMix);
             if (v.shimmerKnob) rp.shimmer = clampf (st.wah, 0.0f, 1.0f);   // WORSHIP : octave au-dessus qui scintille
             reverb.setParams (rp, force);
         }
@@ -772,6 +796,98 @@ private:
         nv->hop = 0; nv->life = 0;
         // l'ancienne prise s'efface pendant le glissé
         v.gate = false; v.releasing = true; v.held = false; v.releaseT = xf * 2.2f; v.noLoop = true;
+    }
+
+    // ---- CRY mode NOTES : chaque touche = sa note, avec le son de tes prises ---------------------------
+    // Touches appuyées ensemble (moins de 35 ms) = accord : la vraie corde électrique (stéréo) + le son slide qui arrive
+    // derrière ; les notes de l'accord partent l'une après l'autre, comme des doigts sur les cordes.
+    // Note seule = ta note tenue (petit glissé d'entrée, vibrato qui arrive) ; note liée à une note seule tenue = glissé.
+    static constexpr float kNotesSolo = 1.0f, kNotesString = 0.40f, kNotesSlide = 0.35f;   // niveaux (démo validée)
+    // AURORE : slide au goulot de bouteille (worship) : pas d'attaque, la note monte en volume et glisse par en dessous (« ouuh »)
+    bool bottle() const { return V->samples == 5 && st.preset == 1; }
+    void notesNoteOn (int note, float vel)
+    {
+        const uint64_t now = clock + 1;   // (+1 : jamais 0)
+        const bool chord = notesGroupStart != 0 && now - notesGroupStart < (uint64_t) (0.035f * sr);
+        if (! chord) { notesGroupStart = now; notesIdx = 0; notesFirst = note; notesFirstVel = vel; }
+        const int idx = notesIdx++;
+        if (bottle()) { notesStart (note, vel, idx > 0); return; }   // AURORE : la bouteille touche toutes les cordes en même temps
+        if (idx == 0) { notesStart (note, vel, false); return; }
+        if (idx == 1)
+        {   // la 1ʳᵉ touche était partie en note seule : elle devient la 1ʳᵉ corde de l'accord
+            for (auto& v : voices) if (v.active && v.gate && v.note == notesFirst && v.layer == 0) quickKill (v, 0.008f);
+            notesStart (notesFirst, notesFirstVel, true);
+        }
+        const int delay = (int) (std::min (idx, 6) * V->strumMs * (0.85f + 0.15f * (rngUi.next() + 1.0f)) * 0.001f * sr);
+        Pending pn; pn.note = note; pn.vel = vel; pn.delay = std::max (1, delay); pn.chord = true;
+        pending.push_back (pn);
+    }
+    void notesStart (int note, float vel, bool chord)
+    {
+        noteAge = 0;
+        { const int si = stringOf (note); viz[(size_t) si].store (std::max (viz[(size_t) si].load(), 9.0f * (0.6f + 0.4f * vel))); }
+        for (auto& v : voices) if (v.active && v.note == note && (v.gate || v.held)) quickKill (v, 0.05f);   // même note rejouée
+        if (bottle())
+        {
+            StringVoice* prev = nullptr; int nHeld = 0;
+            for (auto& v : voices) if (v.active && v.gate && ! v.held && v.zone != nullptr && v.note != note) { ++nHeld; prev = &v; }
+            const bool legato = ! chord && nHeld == 1 && prev != nullptr && std::abs (prev->note - note) <= 12;
+            if (legato)
+            {   // la bouteille glisse d'une note à l'autre (la corde continue de vibrer : pas de nouvelle attaque)
+                const float from = prev->curSemi, dist = std::fabs ((float) note - from);
+                releaseVoice (*prev); prev->releaseT = std::min (prev->releaseT, 0.35f);
+                startLayer (note, vel, 0, kNotesSolo, from, 0.0f, 0.05f);
+                bottleMove (note, from, (0.06f + 0.024f * dist) * (0.5f + glideMsNow / 60.0f), 0.10f + 0.02f * std::min (dist, 5.0f));
+            }
+            else
+            {   // « ouuh » : la bouteille arrive d'un ton en dessous pendant que le volume monte
+                startLayer (note, vel, 0, kNotesSolo * (chord ? 0.62f : 1.0f), (float) note - 2.0f, 0.0f, chord ? 0.40f : 0.36f);
+                bottleMove (note, (float) note - 2.0f, 0.26f, 0.12f);
+            }
+            return;
+        }
+        if (! chord)
+        {
+            StringVoice* prev = nullptr; int nSolo = 0, nChord = 0;
+            for (auto& v : voices)
+                if (v.active && v.gate && ! v.held && v.zone != nullptr) { if (v.layer == 0) { ++nSolo; prev = &v; } else ++nChord; }
+            const bool legato = nSolo == 1 && nChord == 0 && prev != nullptr && std::abs (prev->note - note) <= 12;
+            const float from = legato ? prev->curSemi : (float) note - 1.0f;   // legato : depuis la note d'avant ; sinon petit glissé d'entrée
+            if (legato) releaseVoice (*prev);
+            startLayer (note, vel, 0, kNotesSolo, from, legato ? glideMsNow : 40.0f, legato ? 0.012f : 0.030f);
+        }
+        else
+        {
+            startLayer (note, vel, 3, kNotesString, (float) note, 0.0f, 0.002f);   // la corde (attaque des doigts)
+            startLayer (note, vel, 2, kNotesSlide, (float) note, 0.0f, 0.35f);     // le son slide de tes prises, derrière
+        }
+    }
+    // la dernière voix lancée sur cette note suit la trajectoire de la main (de fromSemi à la note, en « sec » secondes)
+    void bottleMove (int note, float fromSemi, float sec, float overshootSemi)
+    {
+        StringVoice* nv = nullptr;
+        for (auto& v : voices) if (v.active && v.note == note && v.gate && (nv == nullptr || v.age > nv->age)) nv = &v;
+        if (nv == nullptr) return;
+        nv->slFrom = fromSemi; nv->slTo = (float) note; nv->slT = 0.0f; nv->slLen = std::max (0.02f, sec) * sr; nv->slOver = overshootSemi;
+        nv->curSemi = nv->prevSemiN = fromSemi; nv->tgtSemi = (float) note; nv->rng.s = 911u + (uint32_t) note * 77u + ageCounter;
+    }
+    void startLayer (int note, float vel, int kind, float gain, float fromSemi, float glideMs, float swellSec)
+    {
+        const SampleZone* z = samples->pick (note, 1.0f, rrCount++, kind);
+        if (z == nullptr) return;
+        StringVoice* v = allocVoice();
+        if (v == nullptr) return;
+        v->clear();
+        v->active = true; v->gate = true; v->releasing = false; v->held = false;
+        v->note = note; v->age = ++ageCounter; v->vel = vel; v->layer = kind;
+        v->zone = z; v->spos = 0.0; v->oneShot = false;
+        v->relEnv = 1.0f; v->susG = 1.0f; v->damp = 1.0f;
+        v->sgain = gain * (0.5f + 0.5f * clampf (vel, 0.0f, 1.0f)) * kSampleGain;
+        v->tgtSemi = (float) note; v->curSemi = v->lastSemi = fromSemi;
+        v->glideK = glideMs > 0.0f ? glideCoef (glideMs) : 1.0f;
+        v->rate = std::exp2 ((v->curSemi - (float) z->root) / 12.0f) * (double) samples->sr / sr;
+        v->swellT = 0.0f; v->swellLen = swellSec * sr; v->padSine = false;
+        v->hop = 0; v->life = 0;
     }
 
     // ---- CRY : une prise entière par tonalité (comme les pads par tonalité) ----------------------------
@@ -837,6 +953,8 @@ private:
                 const uint32_t score = v.releasing ? v.age : v.age + 0x40000000u;
                 if (score < oldest) { oldest = score; best = &v; }
             }
+            // voix réutilisée alors qu'elle sonne encore : on garde son dernier échantillon et on l'éteint en 3 ms (sinon clic)
+            if (best != nullptr && best->active) { declickM += best->lastOut; declickS += best->lastSide; }
         }
         return best;
     }
@@ -849,13 +967,15 @@ private:
         return best;
     }
 
-    void doNoteOn (int note, float vel, int)
+    void doNoteOn (int note, float vel, int chordFlag)
     {
+        if (V->samples >= 4 && ! usingSamples()) return;   // CRY : seulement avec tes prises
         // visuel : la corde concernée vibre
         const int si = stringOf (note);
         viz[(size_t) si].store (std::max (viz[(size_t) si].load(), 9.0f * (0.6f + 0.4f * vel)));
 
         if (V->samples == 4 && usingSamples()) { padNoteOn (note, vel); return; }
+        if (V->samples == 5 && usingSamples()) { notesStart (note, vel, chordFlag != 0); return; }
         bool cryPoly = false;
         if (V->mono && V->samples == 3 && usingSamples())
         {   // CRY : une note seule liée à la précédente = glissé du bottleneck ; plusieurs touches ensemble = accord
@@ -964,6 +1084,7 @@ private:
         v->sgain = 0.22f * (0.4f + 0.6f * from.vel) * kAcSampleGain;
         v->curSemi = v->tgtSemi = (float) z->root;
         v->rate = (double) samples->sr / sr;
+        v->swellT = 0.0f; v->swellLen = 0.003f * sr;   // 3 ms d'entrée : le bruit enregistré ne démarre pas sur un saut (clic)
     }
 
     void startExcitation (StringVoice& v, float amp, bool soft)
@@ -1046,6 +1167,7 @@ private:
     }
 
     float pitchOffsetSemi = 0;   // bend + vibrato (global, en demi-tons)
+    float vibWave = 0;           // forme du vibrato à cet instant (-1..1, avec la dérive de la main)
 
     //==========================================================================
     inline float voiceSample (StringVoice& v)
@@ -1166,14 +1288,32 @@ private:
         side = 0.0f;
         if (! v.oneShot)
         {
-            if (v.curSemi != v.tgtSemi)
+            if (v.slLen > 0.0f)
+            {   // AURORE : la main amène la bouteille (accélère puis freine), dépasse un tout petit peu la note et revient
+                const float u = std::min (1.0f, v.slT / v.slLen), dir = v.slTo >= v.slFrom ? 1.0f : -1.0f;
+                if (u < 1.0f) { const float sc = u * u * (3.0f - 2.0f * u); v.curSemi = v.slFrom + (v.slTo + dir * v.slOver - v.slFrom) * sc; }
+                else
+                {
+                    const float after = (v.slT - v.slLen) / sr;
+                    v.curSemi = v.slTo + dir * v.slOver * std::exp (-after / 0.035f);
+                    if (after > 0.25f) { v.curSemi = v.slTo; v.slLen = 0.0f; }
+                }
+                v.slT += 1.0f;
+            }
+            else if (v.curSemi != v.tgtSemi)
             {
                 v.curSemi += (v.tgtSemi - v.curSemi) * v.glideK;
                 if (std::fabs (v.tgtSemi - v.curSemi) < 1.0e-4f) v.curSemi = v.tgtSemi;
             }
             if ((v.hop++ & 15) == 0)
             {
-                v.rate = std::exp2 ((v.curSemi + pitchOffsetSemi - (float) z.root) / 12.0f) * (double) samples->sr / sr;
+                float own = 0.0f;
+                if (V->samples == 5 && V->autoVibCents > 0.0f)
+                {   // CRY NOTES : le vibrato arrive après l'attaque de CHAQUE note (même phase pour toutes : une seule barre)
+                    const float t = clampf (((float) v.life / sr - V->autoVibDelay) / V->autoVibRise, 0.0f, 1.0f);
+                    own = V->autoVibCents * (st.preset == 1 ? 1.6f : 1.0f) * t * vibWave * 0.01f;   // bouteille : vibrato de slide plus large
+                }
+                v.rate = std::exp2 ((v.curSemi + pitchOffsetSemi + own - (float) z.root) / 12.0f) * (double) samples->sr / sr;
                 if (V->roundTone)
                 {
                     const float f0 = 440.0f * std::exp2 ((v.curSemi + pitchOffsetSemi - 69.0f) / 12.0f);
@@ -1246,7 +1386,27 @@ private:
             return m * g * 1.6f;
         }
         side = 0.5f * (L - R) * g;
-        return 0.5f * (L + R) * g;
+        float mono = 0.5f * (L + R);
+        if (V->samples == 5 && st.preset == 1 && ! v.oneShot)
+        {   // AURORE : le verre qui frotte sur les cordes quand la bouteille bouge (plus fort quand elle va vite) ;
+            // sur les cordes filées (graves), le verre saute de spire en spire : petit grésillement dont la hauteur suit la vitesse
+            const float speed = std::fabs (v.curSemi - v.prevSemiN) * sr;   // demi-tons par seconde
+            v.prevSemiN = v.curSemi;
+            const float amt = clampf (speed / 25.0f, 0.0f, 1.0f);
+            if (amt > 0.001f)
+            {
+                if ((v.hop & 31) == 1) v.fric.set (1800.0f + 1600.0f * amt, 0.8f, sr);
+                v.fric.process (v.rng.next());
+                float nz = v.fric.bp * 0.010f * amt;
+                if (v.note <= 57)
+                {   // cordes filées : ~40 spires par demi-tons parcourus
+                    v.buzzPh += 40.0f * speed / sr; if (v.buzzPh >= 1.0f) v.buzzPh -= 1.0f;
+                    nz += (v.buzzPh < 0.12f ? 1.0f : -0.136f) * 0.004f * amt;
+                }
+                mono += nz;
+            }
+        }
+        return mono * g;
     }
 
     //==========================================================================
@@ -1258,7 +1418,7 @@ private:
         for (size_t i = 0; i < pending.size();)
         {
             pending[i].delay -= n;
-            if (pending[i].delay <= 0) { const auto pn = pending[i]; pending.erase (pending.begin() + (long) i); doNoteOn (pn.note, pn.vel, 0); }
+            if (pending[i].delay <= 0) { const auto pn = pending[i]; pending.erase (pending.begin() + (long) i); doNoteOn (pn.note, pn.vel, pn.chord ? 1 : 0); }
             else ++i;
         }
 
@@ -1280,13 +1440,14 @@ private:
             {
                 const bool manual = v.mod != ModMode::Wah && v.mod != ModMode::PalmMute;
                 float cents = manual ? modS * v.vibCents : 0.0f;
-                if (v.autoVibCents > 0.0f)
+                if (v.autoVibCents > 0.0f && v.samples != 5)   // (CRY NOTES : chaque note a son propre vibrato, voir sampleVoice)
                 {   // vibrato de chanteur : la note d'abord droite, puis le vibrato s'installe
                     const float t = clampf ((noteAge - v.autoVibDelay) / v.autoVibRise, 0.0f, 1.0f);
                     cents += v.autoVibCents * t * t * (3.0f - 2.0f * t);
                 }
                 const float wave = v.vibUp ? 0.5f - 0.5f * std::cos (vibPh) : std::sin (vibPh);   // guitariste : la note monte et revient
-                vibC = cents * (1.0f + 0.15f * 200.0f * w2) * wave * 0.01f;   // centièmes -> demi-tons
+                vibWave = (1.0f + 0.15f * 200.0f * w2) * wave;
+                vibC = cents * vibWave * 0.01f;   // centièmes -> demi-tons
             }
             lastPitchOffset = pitchOffsetSemi;
             pitchOffsetSemi = bs + vibC;
@@ -1297,6 +1458,7 @@ private:
                 if (! sv.active) continue;
                 float sd = 0.0f;
                 const float d = sv.zone != nullptr ? sampleVoice (sv, sd) : voiceSample (sv);
+                sv.lastOut = sv.active ? d : 0.0f; sv.lastSide = sv.active ? sd : 0.0f;
                 side += sd;
                 if (h > 0.0f)
                 {   // saturation corde par corde (comme un micro hexaphonique) : chaque corde sature seule,
@@ -1315,6 +1477,12 @@ private:
                 scrapeSvf.process (wn);
                 const float nz = scrapeSvf.bp * scrapeAmp;
                 acc += nz; side += nz * 0.35f;
+            }
+            if (declickM != 0.0f || declickS != 0.0f)
+            {
+                acc += declickM; side += declickS;
+                declickM *= declickK; declickS *= declickK;
+                if (std::fabs (declickM) < 1.0e-7f && std::fabs (declickS) < 1.0e-7f) declickM = declickS = 0.0f;
             }
             monoBuf[i] = acc;
             sideBuf[i] = side;
@@ -1491,7 +1659,9 @@ private:
                 sigR[i] = x * (1.0f - 0.3f * chMix) + chMix * wr - sideBuf[i];
                 if (v.wide > 0.0f)
                 {   // guitare doublée : la droite joue la même chose un peu plus tard, légèrement « autre main »
-                    const float dbl = chR.tap (0.0135f * sr + 0.00035f * sr * std::sin (chPh1 * 0.61f + 0.4f));
+                    // (son propre oscillateur : avant, chPh1 * 0.61 sautait à chaque tour de chPh1 -> petit clic toutes les 2,3 s)
+                    dblPh += 2.0f * kPi * 0.43f * 0.61f / sr; if (dblPh > 2.0f * kPi) dblPh -= 2.0f * kPi;
+                    const float dbl = chR.tap (0.0135f * sr + 0.00035f * sr * std::sin (dblPh));
                     sigR[i] = sigR[i] * (1.0f - v.wide) + dbl * v.wide * 0.97f;
                 }
             }

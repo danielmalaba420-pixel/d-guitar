@@ -37,6 +37,7 @@ APVTS::ParameterLayout DGuitarProcessor::createLayout()
     layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "patspeed", 1 }, "Vitesse du rythme", juce::StringArray { "x1/2", "x1", "x2" }, 1));
     layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "humanize", 1 }, "Humaniser", juce::NormalisableRange<float> (0.0f, 1.0f), 0.35f));
     layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "noises", 1 }, "Bruits de doigts", true));
+    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "cryprise", 1 }, "CRY : mode prise", false));   // CRY : NOTES (défaut) ou PRISE
     layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "pitchbend", 1 }, "Pitch Bend", juce::NormalisableRange<float> (-1.0f, 1.0f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "mod", 1 }, "Modulation", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f, pct));
     return layout;
@@ -55,6 +56,7 @@ DGuitarProcessor::DGuitarProcessor()
     pPatSpeed = apvts.getRawParameterValue ("patspeed");
     pHuman = apvts.getRawParameterValue ("humanize");
     pNoises = apvts.getRawParameterValue ("noises");
+    pCryPrise = apvts.getRawParameterValue ("cryprise");
     sink.e = &engine;
 }
 
@@ -75,7 +77,14 @@ void DGuitarProcessor::prepareToPlay (double sampleRate, int)
 
 int DGuitarProcessor::getGuitar() const { return juce::jlimit (0, dguitar::kNumGuitars - 1, juce::roundToInt (pGuitar->load())); }
 // jeu d'échantillons voulu : DIVE et WORSHIP = guitare électrique ; ACOUSTIC = acier (Folk), doigts (Arpèges), nylon
-int DGuitarProcessor::wantedSet() const { return dguitar::wantedSampleSet (getGuitar(), getPreset()); }
+int DGuitarProcessor::wantedSet() const { return dguitar::wantedSampleSet (getGuitar(), getPreset(), getCryPrise()); }
+bool DGuitarProcessor::getCryPrise() const { return pCryPrise->load() > 0.5f; }
+const dguitar::Voicing& DGuitarProcessor::currentVoicing() const { return dguitar::voicing (dguitar::voicingIndex (getGuitar(), getCryPrise())); }
+void DGuitarProcessor::setCryPrise (bool prise)
+{   // les potards changent de sens d'un mode à l'autre (FONDU / GLISSÉ, effets) : on remet ceux du preset dans ce mode
+    setParamValue ("cryprise", prise ? 1.0f : 0.0f);
+    if (getGuitar() == 5) selectPreset (getPreset());
+}
 
 int DGuitarProcessor::getPatSpeed() const { return juce::jlimit (0, 2, juce::roundToInt (pPatSpeed->load())); }
 float DGuitarProcessor::getHuman() const { return pHuman->load(); }
@@ -114,6 +123,8 @@ void DGuitarProcessor::applySettings()
     s.guitar = getGuitar();
     s.drive = pKnob[0]->load(); s.tone = pKnob[1]->load(); s.wah = pKnob[2]->load(); s.delay = pKnob[3]->load();
     s.chorus = pKnob[4]->load(); s.reverb = pKnob[5]->load(); s.volume = pKnob[6]->load();
+    s.cryPrise = getCryPrise();
+    s.preset = getPreset();
     engine.setSettings (s);
 }
 
@@ -129,7 +140,7 @@ void DGuitarProcessor::selectGuitar (int index)
             p->endChangeGesture();
         }
     };
-    const auto& d = dguitar::voicing (index);
+    const auto& d = dguitar::voicing (dguitar::voicingIndex (index, getCryPrise()));
     set ("guitar", (float) index);
     set ("preset", 0.0f);
     for (int i = 0; i < dguitar::kNumKnobs; ++i) set (kKnobIds[i], d.preset[0][i] / 100.0f);
@@ -140,7 +151,7 @@ void DGuitarProcessor::selectGuitar (int index)
 void DGuitarProcessor::selectPreset (int index)
 {
     index = ((index % 3) + 3) % 3;
-    const auto& d = dguitar::voicing (getGuitar());
+    const auto& d = currentVoicing();
     auto set = [this] (const char* id, float v)
     {
         if (auto* p = apvts.getParameter (id))

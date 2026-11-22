@@ -5,7 +5,8 @@
 namespace dguitar
 {
 static constexpr int kNumGuitars = 6;
-static constexpr int kNumKnobs = 7;   // AMP DRIVE, TONE, WAH, DELAY, CHORUS, REVERB, VOLUME
+static constexpr int kNumKnobs = 7;
+static constexpr int kCryNotes = 6;   // voicing caché : CRY en mode NOTES (le guitariste joue tes notes, comme un piano)   // AMP DRIVE, TONE, WAH, DELAY, CHORUS, REVERB, VOLUME
 
 enum class ModMode { Vibrato, Wah, WahVibrato, Whammy, Tremolo, PalmMute, Swell };
 
@@ -67,6 +68,7 @@ struct Voicing
     bool  roundTone = false; // (CRY) son rond et chantant : filtre qui suit chaque note (presque que la fondamentale) ; TONE l'ouvre
     bool  shimmerKnob = false; // (WORSHIP) le 3ᵉ potard règle le shimmer de la reverb (octave au-dessus) au lieu du wah
     bool  glideKnob = false;   // (CRY) le 3ᵉ potard règle la vitesse du glissé (bottleneck) entre deux notes liées
+    int   rvSource = 6;        // moteur D-REVERB : source (6 = guitare/plate ; 5 = cordes/hall long, CRY NOTES)
 };
 
 static inline const Voicing& voicing (int i)
@@ -131,18 +133,39 @@ static inline const Voicing& voicing (int i)
         // ---------------------------------------------------------------- CRY : les prises de slide de Dan, une prise ENTIÈRE par tonalité
         // (comme les pads par tonalité) : n'importe quel Do joue ta prise en Do, etc. ; une seule tonalité à la fois,
         // changer de touche = fondu enchaîné (3ᵉ potard FONDU) ; lâcher = la prise s'éteint en douceur (3 s).
-        // Presets = les 3 modèles : Angelitus, Piratas, Ratones. Tonalités manquantes : transposées (Rubber Band, timbre gardé).
+        // Presets = les 3 modèles : Selah, Aurore, Eden. Tonalités manquantes : transposées (Rubber Band, timbre gardé).
         { "CRY", false, false, 4, 0, 2, 2, 0,
           6.0f, 8000, -0.03f, 0.15f, 0.9f, 0.0f, 3000, 0, 0.0f,
           0.96f, 1.0f, 0.855f, 0.0f, 8000, 0.7f,
           ModMode::Vibrato, 0, 5.2f, 0.0f,
           4.0f, 450, 2200, 0.3f, 0.0f, 0.0f,
           0.0f, 0.0f, 0.0f, 0.0f, 70, 12000, 3000, 0.0f, 0.0f, 0.75f, 0.55f,
-          { "Angelitus", "Piratas", "Ratones" },
+          { "Selah", "Aurore", "Eden" },
           { { 0, 50, 49, 0, 0, 0, 76 }, { 0, 50, 49, 0, 0, 0, 76 }, { 0, 50, 49, 0, 0, 0, 76 } },
           { 16.6, 16.6, 16.7, 16.7, 16.8, 17.1, 17.4, 17.8, 18.3 },
           1.0f, -1.0f, 0.0f, 5.2f, 0.35f, false, 0.0f, 0.0f, 4, 0.0f, false, 0.0f, 0.0f, 0.5f, false, false, true },
     };
+    // ---------------------------------------------------------------- CRY mode NOTES : chaque touche = sa note, jouée avec le son de tes prises
+    // note seule : la note tenue de ta prise (vibrato aplati puis vibrato commun qui arrive après l'attaque, petit glissé d'entrée) ;
+    // notes liées : glissé d'une note à l'autre ; accord : vraie corde électrique (stéréo, deux prises) + le son slide qui arrive derrière.
+    static const Voicing cryNotes = [] {
+        Voicing c = v[5];
+        c.mono = false; c.legato = false; c.maxVoices = 28;
+        c.glideMs = 30.0f; c.bendUp = 2.0f; c.bendDown = 2.0f; c.strumMs = 18.0f;
+        c.releaseMs = 1270.0f;            // queue de la note lâchée (-60 dB en 1,27 s, comme la démo validée)
+        c.mod = ModMode::Vibrato; c.vibCents = 30.0f; c.vibRate = 4.2f;   // molette : vibrato plus large
+        c.comp = 0.0f; c.rvSource = 5; c.rvSpace = 0.92f; c.rvTone = 0.0f;   // hall long et doux (~5 s), comme l'ambiance de tes prises
+        c.preset[0][0] = 0; c.preset[0][1] = 20; c.preset[0][2] = 49; c.preset[0][3] = 22; c.preset[0][4] = 0; c.preset[0][5] = 85; c.preset[0][6] = 76;
+        for (int p = 1; p < 3; ++p) for (int k = 0; k < kNumKnobs; ++k) c.preset[p][k] = c.preset[0][k];
+        c.autoVibCents = 14.0f; c.autoVibRate = 4.2f; c.autoVibDelay = 0.35f; c.autoVibRise = 0.6f;
+        c.samples = 5; c.sustainer = 0.0f; c.vibUp = false; c.falloff = 0.0f; c.roundTone = false;
+        c.shimmerKnob = false; c.glideKnob = true;
+        for (auto& t : c.trim) t += 3.0;   // même volume que le mode PRISE (mesuré au rendu)
+        return c;
+    }();
+    if (i == kCryNotes) return cryNotes;
     return v[i < 0 ? 0 : (i >= kNumGuitars ? kNumGuitars - 1 : i)];
 }
+// la guitare à l'écran (0..5) et le mode CRY -> le voicing utilisé par le moteur
+static inline int voicingIndex (int guitar, bool cryPrise) { return guitar == 5 && ! cryPrise ? kCryNotes : guitar; }
 } // namespace dguitar
