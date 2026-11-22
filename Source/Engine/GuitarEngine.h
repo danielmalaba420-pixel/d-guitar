@@ -423,7 +423,7 @@ public:
         guitar = g; vIndex = vi;
         V = &voicing (vi);
         for (auto& v : voices) { v.clear(); v.active = false; v.gate = false; }
-        held.clear(); pending.clear();
+        held.clear(); pending.clear(); motionKeys.clear();
         for (int& h : padHeld) h = 0;
         configure();
     }
@@ -442,7 +442,7 @@ public:
         if (s == samples) return;
         samples = s;
         for (auto& v : voices) { v.clear(); v.active = false; v.gate = false; }
-        held.clear(); pending.clear();
+        held.clear(); pending.clear(); motionKeys.clear();
         for (int& h : padHeld) h = 0;
         configure();
     }
@@ -452,6 +452,7 @@ public:
         if (V->samples == 4) return samples->pad;     // CRY PRISE : seulement un jeu « une prise par tonalité »
         if (V->samples == 5) return samples->notes;   // CRY NOTES : seulement un jeu « notes »
         if (samples->pad || samples->notes) return false;
+        if (V->slideMode) return samples->name == "motion-slide";   // MOTION : seulement ses vraies notes de slide
         const bool elec = samples->name == "electric-di";
         return V->samples == 1 ? elec : ! elec;
     }
@@ -464,6 +465,7 @@ public:
         velocity = clampf (velocity, 0.02f, 1.0f);
         if (V->samples >= 4 && ! usingSamples()) return;   // CRY sans ses prises (chargement en cours, fichiers absents) : rien plutôt qu'un faux son
         if (V->samples == 5) { notesNoteOn (note, velocity); return; }
+        if (V->slideMode) { if (usingSamples()) motionNoteOn (note, velocity); return; }   // MOTION : seulement avec la vraie guitare
         if (V->mono)
         {
             doNoteOn (note, velocity, 0);
@@ -485,6 +487,7 @@ public:
     void strike (int note, float velocity)
     {
         if (V->samples >= 4 && ! usingSamples()) return;
+        if (V->slideMode) { if (usingSamples()) motionNoteOn (note, clampf (velocity, 0.02f, 1.0f)); return; }
         if (V->samples == 5) { notesNoteOn (note, clampf (velocity, 0.02f, 1.0f)); return; }   // CRY NOTES : accords reconnus
         doNoteOn (note, clampf (velocity, 0.02f, 1.0f), 0);
     }
@@ -513,6 +516,7 @@ public:
     void noteOff (int note)
     {
         if (V->samples == 4 && usingSamples()) { padNoteOff (note); return; }
+        if (V->slideMode) { motionNoteOff (note); return; }
         // note encore en attente d'étalement : on l'annule
         for (size_t i = 0; i < pending.size(); ++i) if (pending[i].note == note) { pending.erase (pending.begin() + (long) i); return; }
         if (V->mono)
@@ -548,7 +552,7 @@ public:
 
     void allNotesOff()
     {
-        pending.clear(); held.clear();
+        pending.clear(); held.clear(); motionKeys.clear();
         for (int& h : padHeld) h = 0;
         for (auto& v : voices) if (v.active && v.gate) releaseVoice (v);
     }
@@ -642,7 +646,8 @@ private:
         hexK = 1.0f - std::exp (-2.0f * kPi * 3200.0f / sr);
         declickK = std::exp (-1.0f / (0.003f * sr));
         const Voicing& v = *V;
-        if (usingSamples()) pkEq.lowpass (std::min (v.pkResHz * 2.5f, sr * 0.42f), 0.6f, sr);   // le vrai micro est déjà dans l'enregistrement
+        if (usingSamples() && v.slideMode) pkEq.lowpass (sr * 0.42f, 0.6f, sr);   // MOTION : la guitare enregistrée passe intacte
+        else if (usingSamples()) pkEq.lowpass (std::min (v.pkResHz * 2.5f, sr * 0.42f), 0.6f, sr);   // le vrai micro est déjà dans l'enregistrement
         else pkEq.lowpass (v.pkResHz, v.pkResQ, sr);
         // petite bosse de résonance, puis coupure naturelle
         midPre.peaking (900.0f, 0.8f, v.preMidDb, sr);
@@ -689,7 +694,7 @@ private:
         toneHi.highShelf (2600.0f, tn * 14.0f, sr);
 
         wahAmt = (v.shimmerKnob || v.glideKnob) ? 0.0f : clampf (st.wah, 0, 1);   // WORSHIP : ce potard règle le shimmer ; CRY : le glissé
-        glideMsNow = v.glideKnob ? (v.samples == 5 ? 3.0f + 27.0f * std::pow (clampf (st.wah, 0, 1) / 0.49f, 2.0f)   // NOTES : 49 % = 30 ms (démo validée)
+        glideMsNow = v.glideKnob ? ((v.samples == 5 || v.slideMode) ? 3.0f + 27.0f * std::pow (clampf (st.wah, 0, 1) / 0.49f, 2.0f)   // NOTES : 49 % = 30 ms (démo validée)
                                                    : lerpf (25.0f, 420.0f, std::pow (clampf (st.wah, 0, 1), 1.4f)))
                                  : v.glideMs;
         padXfade = lerpf (0.1f, 8.0f, std::pow (clampf (st.wah, 0, 1), 2.0f));
@@ -717,7 +722,7 @@ private:
             sideTone[0].lowShelf (180.0f, -tn * 5.0f, sr);
             sideTone[1].highShelf (2600.0f, tn * 14.0f, sr);
         }
-        if (v.samples >= 3)
+        if (v.samples >= 3 || v.slideMode)
         {
             sideTone[0].lowShelf (180.0f, -tn * 5.0f, sr);
             sideTone[1].highShelf (2600.0f, tn * 14.0f, sr);
@@ -735,6 +740,7 @@ private:
             lastRvSig = sig;
             auto rp = dreverb::makeParams (v.rvSource, v.rvSpace, 0.45f, v.rvTone, 0.0f, rvMix);
             if (v.shimmerKnob) rp.shimmer = clampf (st.wah, 0.0f, 1.0f);   // WORSHIP : octave au-dessus qui scintille
+            else if (v.shimmerFix > 0.0f) rp.shimmer = v.shimmerFix;         // MOTION : un peu de shimmer, toujours
             reverb.setParams (rp, force);
         }
     }
@@ -796,6 +802,99 @@ private:
         nv->hop = 0; nv->life = 0;
         // l'ancienne prise s'efface pendant le glissé
         v.gate = false; v.releasing = true; v.held = false; v.releaseT = xf * 2.2f; v.noLoop = true;
+    }
+
+    // ---- MOTION : guitare slide worship (vraies notes de slide) ---------------------------------
+    // jouée doucement (vélocité < 55 %) : « ouuh », le volume monte pendant que la bouteille arrive d'un ton en dessous ;
+    // jouée fort : coup de médiator puis petit glissé d'arrivée d'un demi-ton ; notes liées : la bouteille glisse sans rejouer la corde
+    // (au-delà d'un ton, on passe en fondu vers le vrai échantillon de la note d'arrivée : timbre juste) ; lâcher la note liée = retour
+    // sur la note encore tenue ; touches ensemble (moins de 35 ms) : accord, la barre sur plusieurs cordes.
+    uint64_t motionGroup = 0;
+    std::vector<int> motionKeys;   // touches enfoncées, dans l'ordre
+    void motionNoteOn (int note, float vel)
+    {
+        const uint64_t now = clock + 1;
+        const bool chord = motionGroup != 0 && now - motionGroup < (uint64_t) (0.035f * sr);
+        if (! chord) motionGroup = now;
+        motionKeys.erase (std::remove (motionKeys.begin(), motionKeys.end(), note), motionKeys.end());
+        motionKeys.push_back (note);
+        noteAge = 0;
+        { const int si = stringOf (note); viz[(size_t) si].store (std::max (viz[(size_t) si].load(), 9.0f * (0.6f + 0.4f * vel))); }
+        for (auto& v : voices) if (v.active && v.note == note && (v.gate || v.held)) quickKill (v, 0.04f);   // même note rejouée
+        StringVoice* prev = nullptr; int nHeld = 0;
+        for (auto& v : voices) if (v.active && v.gate && ! v.held && v.zone != nullptr && v.note != note) { ++nHeld; prev = &v; }
+        if (! chord && nHeld == 1 && prev != nullptr && std::abs (prev->note - note) <= 12) { motionSlide (*prev, note); return; }
+        // pas de retard : chaque note commence directement dans la fin du vrai glissé du bottleneck (enregistré),
+        // le son part tout de suite et la note est juste en ~0,13 s. Jouée doucement : le volume monte un peu en plus (« ouuh »).
+        const bool soft = vel < 0.40f;
+        StringVoice* v = motionVoice (note, vel);
+        if (v == nullptr) return;
+        (void) soft; v->swellLen = 0.0f;   // la prise telle quelle : coup de corde + vrai glissé enregistré
+    }
+    void motionNoteOff (int note)
+    {
+        motionKeys.erase (std::remove (motionKeys.begin(), motionKeys.end(), note), motionKeys.end());
+        for (auto& v : voices)
+            if (v.active && v.gate && v.note == note)
+            {
+                if (sustainDown) { v.held = true; continue; }
+                // une seule note sonnait et une autre touche est encore tenue : la bouteille y retourne (comme un vrai slide)
+                int gatedNow = 0; for (auto& w : voices) if (w.active && w.gate && ! w.held) ++gatedNow;
+                if (gatedNow == 1 && ! motionKeys.empty() && std::abs (motionKeys.back() - note) <= 12) { motionSlide (v, motionKeys.back()); continue; }
+                releaseVoice (v);
+            }
+    }
+    StringVoice* motionVoice (int note, float vel)
+    {
+        const SampleZone* z = samples->pick (note, vel, rrCount++);
+        if (z == nullptr) return nullptr;
+        StringVoice* v = allocVoice();
+        if (v == nullptr) return nullptr;
+        v->clear();
+        v->active = true; v->gate = true; v->releasing = false; v->held = false;
+        v->note = note; v->age = ++ageCounter; v->vel = vel;
+        v->zone = z; v->spos = 0.0; v->oneShot = false;
+        v->relEnv = 1.0f; v->susG = 1.0f; v->damp = 1.0f;
+        const float layer = (float) z->vel / 127.0f;
+        v->sgain = clampf (std::pow (vel / std::max (0.05f, layer), 1.2f), 0.25f, 1.15f) * kSampleGain;
+        v->susRef = z->envAt (0.15 * samples->sr);
+        v->tgtSemi = v->curSemi = v->lastSemi = (float) note; v->glideK = 1.0f;
+        v->rate = std::exp2 ((v->curSemi - (float) z->root) / 12.0f) * (double) samples->sr / sr;
+        v->swellT = 0.0f; v->swellLen = 0.0f; v->padSine = false;
+        v->hop = 0; v->life = 0;
+        v->rng.s = 911u + (uint32_t) note * 77u + ageCounter;
+        return v;
+    }
+    void motionMove (StringVoice& v, float from, float to, float sec, float over)
+    {
+        v.slFrom = from; v.slTo = to; v.slT = 0.0f; v.slLen = std::max (0.02f, sec) * sr; v.slOver = over;
+        v.curSemi = v.prevSemiN = from; v.tgtSemi = to;
+    }
+    void motionSlide (StringVoice& v, int note)
+    {   // la bouteille glisse vers « note » sans rejouer la corde
+        const float from = v.curSemi, dist = std::fabs ((float) note - from);
+        const float dur = (0.06f + 0.022f * dist) * (0.5f + glideMsNow / 60.0f);
+        v.note = note; v.life = 0;   // (le vibrato repart après le glissé)
+        motionMove (v, from, (float) note, dur, 0.06f + 0.015f * std::min (dist, 4.0f));
+        noteAge = 0;
+        // timbre juste : loin de l'échantillon joué, on passe en fondu vers le vrai échantillon de la note d'arrivée
+        const SampleZone* z = samples->pick (note, v.vel, rrCount);
+        if (z == nullptr || z == v.zone || std::abs (z->root - note) >= std::abs (v.zone->root - note) || std::abs (v.zone->root - note) <= 1) return;
+        ++rrCount;
+        StringVoice* nv = allocVoice();
+        if (nv == nullptr || nv == &v) return;
+        nv->clear();
+        nv->active = true; nv->gate = true; nv->releasing = false; nv->held = false;
+        nv->note = note; nv->age = ++ageCounter; nv->vel = v.vel;
+        nv->zone = z; nv->spos = std::min (v.spos, (double) std::max (0, (z->loopEnd > 0 ? z->loopEnd : z->frames) - 8)); nv->oneShot = false;
+        nv->relEnv = 1.0f; nv->susG = v.susG; nv->damp = 1.0f; nv->sgain = v.sgain;
+        nv->susRef = z->envAt (0.15 * samples->sr);
+        nv->tgtSemi = (float) note; nv->glideK = 1.0f;
+        nv->rate = std::exp2 ((from - (float) z->root) / 12.0f) * (double) samples->sr / sr;
+        nv->swellT = 0.0f; nv->swellLen = std::max (0.03f, dur) * sr; nv->padSine = true;
+        nv->hop = 0; nv->life = 0; nv->rng.s = v.rng.s + 1u;
+        motionMove (*nv, from, (float) note, dur, v.slOver);
+        v.gate = false; v.releasing = true; v.held = false; v.releaseT = std::max (0.05f, dur * 1.6f);
     }
 
     // ---- CRY mode NOTES : chaque touche = sa note, avec le son de tes prises ---------------------------
@@ -1308,10 +1407,10 @@ private:
             if ((v.hop++ & 15) == 0)
             {
                 float own = 0.0f;
-                if (V->samples == 5 && V->autoVibCents > 0.0f)
+                if ((V->samples == 5 || V->slideMode) && V->autoVibCents > 0.0f)
                 {   // CRY NOTES : le vibrato arrive après l'attaque de CHAQUE note (même phase pour toutes : une seule barre)
                     const float t = clampf (((float) v.life / sr - V->autoVibDelay) / V->autoVibRise, 0.0f, 1.0f);
-                    own = V->autoVibCents * (st.preset == 1 ? 1.6f : 1.0f) * t * vibWave * 0.01f;   // bouteille : vibrato de slide plus large
+                    own = V->autoVibCents * (V->samples == 5 && st.preset == 1 ? 1.6f : 1.0f) * t * vibWave * 0.01f;   // bouteille : vibrato de slide plus large
                 }
                 v.rate = std::exp2 ((v.curSemi + pitchOffsetSemi + own - (float) z.root) / 12.0f) * (double) samples->sr / sr;
                 if (V->roundTone)
@@ -1440,7 +1539,7 @@ private:
             {
                 const bool manual = v.mod != ModMode::Wah && v.mod != ModMode::PalmMute;
                 float cents = manual ? modS * v.vibCents : 0.0f;
-                if (v.autoVibCents > 0.0f && v.samples != 5)   // (CRY NOTES : chaque note a son propre vibrato, voir sampleVoice)
+                if (v.autoVibCents > 0.0f && v.samples != 5 && ! v.slideMode)   // (CRY NOTES, MOTION : chaque note a son propre vibrato, voir sampleVoice)
                 {   // vibrato de chanteur : la note d'abord droite, puis le vibrato s'installe
                     const float t = clampf ((noteAge - v.autoVibDelay) / v.autoVibRise, 0.0f, 1.0f);
                     cents += v.autoVibCents * t * t * (3.0f - 2.0f * t);
@@ -1573,8 +1672,8 @@ private:
                 sideBuf[i] = sd * g;
             }
         }
-        else if (v.samples >= 3 && usingSamples())
-        {   // CRY : tes prises de slide (avec leurs effets) : on garde la stéréo ; DRIVE = chaleur de lampe douce, TONE = couleur
+        else if ((v.samples >= 3 || v.slideMode) && usingSamples())
+        {   // CRY, MOTION : pas d'ampli (le son est déjà celui d'une vraie guitare) ; CRY : tes prises de slide (avec leurs effets) : on garde la stéréo ; DRIVE = chaleur de lampe douce, TONE = couleur
             const float g = postGain * kAmpOut * 3.0f, k = slideSat;
             for (int i = 0; i < n; ++i)
             {

@@ -1,4 +1,4 @@
-D-GUITAR 1.7.0 — Guitares électriques et acoustiques
+D-GUITAR 1.8.0 — Guitares électriques et acoustiques
 Guide d'installation et de prise en main (Mac)
 Créé et développé par Daniel Malaba — Studio Danova
 =====================================================
@@ -56,22 +56,16 @@ D-GUITAR est un INSTRUMENT (comme un synthé), pas un effet.
   BLACK    — acoustique worship : guitare acier avec chorus et grande reverb ;
              presets Worship, Ballade, Ambient ; mêmes potards que ACOUSTIC ;
              BRUITS DOIGTS sur OFF par défaut
-  CRY      — guitare slide jouée par Daniel. Le bouton MODE (sous la guitare) choisit :
-             • MODE : NOTES (par défaut) — comme un piano : chaque touche joue sa note, avec le son
-               des prises de Daniel. Note seule : petit glissé d'entrée puis vibrato qui arrive ;
-               deux notes liées (la 2ᵉ jouée avant de lâcher la 1ʳᵉ) : la note glisse vers la suivante ;
-               plusieurs touches ensemble : accord (vraie corde électrique en stéréo + le son slide
-               qui arrive derrière). Le 3ᵉ potard, GLISSÉ, règle la vitesse des glissés.
-               Presets : SELAH, AURORE (slide au goulot de bouteille, style worship : la note arrive
-               en « ouuh », la bouteille glisse d'une note à l'autre avec le frottement du verre),
-               EDEN.
-             • MODE : PRISE — comme un pad par tonalité : chaque touche (Do, Do#, Ré…) joue la prise
-               entière dans sa tonalité ; changer de touche = fondu vers la nouvelle tonalité.
-               Le 3ᵉ potard, FONDU, règle la durée du passage (0,1 s à 8 s).
-             Une touche lâchée s'éteint doucement ; la pédale de sustain garde le son.
+  MOTION   — guitare slide (bottleneck) worship : chaque touche joue sa note, comme un piano.
+             Chaque note part avec le coup de corde et un petit glissé du bottleneck, puis tient
+             avec le vibrato naturel de la guitare. Deux notes liées (la 2ᵉ jouée avant de lâcher
+             la 1ʳᵉ) : la bouteille glisse vers la suivante sans rejouer la corde ; lâcher la 2ᵉ =
+             retour sur la 1ʳᵉ. Plusieurs touches ensemble : accord.
+             Le 3ᵉ potard, GLISSÉ, règle la vitesse des glissés entre notes liées.
+             Presets : Worship, Lead, Ambient. Notes de La grave (La1) à Fa# aigu (Fa#4).
 
 LES VRAIES GUITARES (échantillons)
-  DIVE, ACOUSTIC, BLACK et CRY lisent les fichiers .dgs du dossier « Samples » :
+  DIVE, ACOUSTIC, BLACK et MOTION lisent les fichiers .dgs du dossier « Samples » :
     Téléchargements › D-Plugins › D-GUITAR › Samples
   (ou Musique › Studio Danova › D-GUITAR › Samples). Ne pas renommer ces fichiers.
   Au premier lancement, le Mac peut demander si Logic peut accéder au dossier

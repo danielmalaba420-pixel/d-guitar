@@ -69,6 +69,8 @@ struct Voicing
     bool  shimmerKnob = false; // (WORSHIP) le 3ᵉ potard règle le shimmer de la reverb (octave au-dessus) au lieu du wah
     bool  glideKnob = false;   // (CRY) le 3ᵉ potard règle la vitesse du glissé (bottleneck) entre deux notes liées
     int   rvSource = 6;        // moteur D-REVERB : source (6 = guitare/plate ; 5 = cordes/hall long, CRY NOTES)
+    bool  slideMode = false;   // (MOTION) guitare slide : la note glisse au lieu d'être rejouée, bruits de contact, vibrato de slide
+    float shimmerFix = 0.0f;   // (MOTION) shimmer de reverb fixe (0..1), sans potard
 };
 
 static inline const Voicing& voicing (int i)
@@ -163,9 +165,35 @@ static inline const Voicing& voicing (int i)
         for (auto& t : c.trim) t += 3.0;   // même volume que le mode PRISE (mesuré au rendu)
         return c;
     }();
+    // ---------------------------------------------------------------- MOTION : guitare slide worship, vraies notes de slide (motion-slide.dgs)
+    // jouée doucement : la note arrive en « ouuh » (volume qui monte + glissé d'un ton) ; jouée fort : coup de médiator puis glissé d'arrivée ;
+    // notes liées : la bouteille glisse sans rejouer la corde ; accords : la barre sur plusieurs cordes. Grande reverb, delay croche pointée.
+    static const Voicing motion = [] {
+        Voicing m = v[2];                      // base : WORSHIP (ampli clair au bord de la saturation, même vraie guitare)
+        m.name = "MOTION";
+        m.mono = false; m.legato = false; m.maxVoices = 14; m.strumMs = 0.0f;
+        m.glideMs = 30.0f; m.bendUp = 2.0f; m.bendDown = 2.0f;
+        m.releaseMs = 380.0f;                  // les cordes derrière la bouteille sont étouffées : extinction courte et naturelle
+        m.swellMs = 0.0f;
+        m.mod = ModMode::Vibrato; m.vibCents = 35.0f; m.vibRate = 5.2f;   // molette : vibrato de slide plus large
+        m.autoVibCents = 0.0f;    // la prise a déjà son propre vibrato de slide : on n'ajoute rien (son naturel)
+        m.autoVibRate = 5.2f; m.autoVibDelay = 0.30f; m.autoVibRise = 0.55f;
+        m.sustainer = 0.0f;                    // extinction naturelle de la prise, rien d'ajouté
+        m.shimmerKnob = false; m.glideKnob = true; m.rvSource = 5; m.rvSpace = 0.80f; m.rvTone = 0.35f;
+        m.presetName[0] = "Worship"; m.presetName[1] = "Lead"; m.presetName[2] = "Ambient";
+        //                 drive tone glis delay chor reverb vol
+        const float p[3][kNumKnobs] = { { 0, 50, 49, 36, 0, 70, 74 }, { 15, 55, 40, 30, 0, 50, 74 }, { 0, 45, 60, 46, 0, 88, 72 } };
+        for (int a = 0; a < 3; ++a) for (int k = 0; k < kNumKnobs; ++k) m.preset[a][k] = p[a][k];
+        m.slideMode = true;
+        for (auto& t : m.trim) t = 11.9f;     // pas d'ampli : niveau remis à celui des autres guitares (mesuré au rendu)
+        m.comp = 0.0f; m.wide = 0.0f;          // ni compresseur ni guitare doublée : la prise telle qu'enregistrée
+        m.shimmerFix = 0.0f;                   // pas de shimmer : la guitare telle qu'enregistrée
+        return m;
+    }();
     if (i == kCryNotes) return cryNotes;
+    if (i == 5) return motion;   // la 6ᵉ guitare est MOTION (CRY retiré)
     return v[i < 0 ? 0 : (i >= kNumGuitars ? kNumGuitars - 1 : i)];
 }
 // la guitare à l'écran (0..5) et le mode CRY -> le voicing utilisé par le moteur
-static inline int voicingIndex (int guitar, bool cryPrise) { return guitar == 5 && ! cryPrise ? kCryNotes : guitar; }
+static inline int voicingIndex (int guitar, bool) { return guitar; }   // (CRY et ses modes sont retirés : la 6ᵉ guitare est MOTION)
 } // namespace dguitar

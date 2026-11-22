@@ -55,7 +55,7 @@ int main (int argc, char** argv)
             if (b >= 2 && b < 30) early = juce::jmax (early, m);
             if (b >= 280) late = juce::jmax (late, m);
         }
-        // CRY ne joue qu'avec tes prises : sans fichiers d'échantillons (ici), silence attendu
+        // MOTION ne joue qu'avec la vraie guitare : sans fichiers d'échantillons (ici), silence attendu
         const bool ok = gi == 5 ? (finite && early < 1.0e-6f) : (finite && early > 1.0e-3f && early < 1.0f && late < early);
         std::printf ("%-6s finite=%d early=%.4f late=%.5f %s\n", dguitar::voicing (gi).name, (int) finite, early, late, ok ? "OK" : "FAIL");
         if (! ok) ++failures;
@@ -87,7 +87,7 @@ int main (int argc, char** argv)
     // 2b) chaque guitare / preset charge le bon fichier d'échantillons (le plugin lit exactement ces noms)
     {
         const char* expect[6][3] = { { "", "", "" }, { "electric-di", "electric-di", "electric-di" }, { "electric-di", "electric-di", "electric-di" },
-                                     { "steel", "finger", "nylon" }, { "steel1", "steel1", "steel1" }, { "cry-notes-selah", "cry-notes-aurore", "cry-notes-eden" } };
+                                     { "steel", "finger", "nylon" }, { "steel1", "steel1", "steel1" }, { "motion-slide", "motion-slide", "motion-slide" } };   // MOTION : ses vraies notes de slide
         bool ok = true;
         for (int g = 0; g < dguitar::kNumGuitars; ++g)
             for (int p = 0; p < 3; ++p)
@@ -95,7 +95,7 @@ int main (int argc, char** argv)
                 const juce::String got (SampleBank::setName (dguitar::wantedSampleSet (g, p)));
                 if (got != expect[g][p]) { ok = false; std::printf ("  guitare %d preset %d : %s (attendu %s)\n", g, p, got.toRawUTF8(), expect[g][p]); }
             }
-        const char* prise[3] = { "cry-prise-selah", "cry-prise-aurore", "cry-prise-eden" };
+        const char* prise[3] = { "motion-slide", "motion-slide", "motion-slide" };
         for (int p = 0; p < 3; ++p)
             if (juce::String (SampleBank::setName (dguitar::wantedSampleSet (5, p, true))) != prise[p]) { ok = false; std::printf ("  CRY prise %d faux\n", p); }
         std::printf ("fichiers d'echantillons par guitare/preset : %s\n", ok ? "OK" : "FAIL");
