@@ -1,4 +1,4 @@
-D-GUITAR 1.6.0 — Guitares électriques et acoustiques
+D-GUITAR 1.6.1 — Guitares électriques et acoustiques
 Guide d'installation et de prise en main (Mac)
 Créé et développé par Daniel Malaba — Studio Danova
 =====================================================
@@ -50,13 +50,19 @@ D-GUITAR est un INSTRUMENT (comme un synthé), pas un effet.
              La molette MODULATION fait des montées de volume (swells) : plus elle est haute,
              plus la note arrive lentement. Le 3ᵉ potard règle le SHIMMER.
   ACOUSTIC — vraies guitares acoustiques : Folk (acier, médiator), Arpèges (acier, doigts),
-             Nylon ; potards BODY, TONE, BRIGHT ; la molette MODULATION étouffe (paume)
+             Nylon ; potards BODY, TONE, BRIGHT ; la molette MODULATION étouffe (paume).
+             BRUITS DOIGTS ON/OFF (sous la guitare) : bruits de doigts et petits glissés
+             sur les cordes — ON par défaut sur ACOUSTIC
   BLACK    — acoustique worship : guitare acier avec chorus et grande reverb ;
-             presets Worship, Ballade, Ambient ; mêmes potards que ACOUSTIC
-  CRY      — guitare slide (bottleneck) faite à partir des prises de Daniel ; presets Angelitus,
-             Piratas, Ratones ; tessiture La3–Do6. Gardez une note et jouez la suivante pour GLISSER
-             (le 3ᵉ potard, GLISSÉ, règle la vitesse) ; plusieurs touches ensemble = accord ;
-             molette MODULATION = vibrato ; la pédale de sustain fonctionne.
+             presets Worship, Ballade, Ambient ; mêmes potards que ACOUSTIC ;
+             BRUITS DOIGTS sur OFF par défaut
+  CRY      — guitare slide jouée par Daniel, comme un pad par tonalité : chaque touche
+             (Do, Do#, Ré…) joue la prise entière dans sa tonalité, quelle que soit l'octave.
+             Choisissez la tonalité du morceau et tenez la touche ; changez de touche pour
+             changer de tonalité : l'ancienne prise s'efface pendant que la nouvelle arrive.
+             Presets Angelitus, Piratas, Ratones. Le 3ᵉ potard, FONDU, règle la durée du
+             passage d'une tonalité à l'autre (0,1 s à 8 s) ; une touche lâchée s'éteint
+             doucement ; la pédale de sustain garde la prise.
 
 LES VRAIES GUITARES (échantillons)
   DIVE, ACOUSTIC, BLACK et CRY lisent les fichiers .dgs du dossier « Samples » :

@@ -24,7 +24,7 @@ public:
 
     static const char* setName (int id)
     {
-        static const char* names[] = { "", "electric-di", "steel", "finger", "nylon", "steel1", "slide-angelitus", "slide-piratas", "slide-ratones" };
+        static const char* names[] = { "", "electric-di", "steel", "finger", "nylon", "steel1", "pad-angelitus", "pad-piratas", "pad-ratones" };
         return names[juce::jlimit (0, 5, id)];
     }
 

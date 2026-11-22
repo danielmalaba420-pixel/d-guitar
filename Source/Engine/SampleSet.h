@@ -37,6 +37,7 @@ struct SampleZone
 struct SampleSet
 {
     std::string name;
+    bool pad = false;   // « DGP1 » : une prise entière par tonalité (CRY) : boucle longue, fondu déjà cuit dans la prise
     int sr = 44100;
     std::vector<SampleZone> zones;
     float peakEnv = 1.0f;
@@ -47,10 +48,11 @@ struct SampleSet
         if (f == nullptr) return false;
         char magic[4];
         uint32_t hdr[2];
-        bool ok = std::fread (magic, 1, 4, f) == 4 && magic[0] == 'D' && magic[1] == 'G' && magic[2] == 'S' && magic[3] == '1'
+        bool ok = std::fread (magic, 1, 4, f) == 4 && magic[0] == 'D' && magic[1] == 'G' && (magic[2] == 'S' || magic[2] == 'P') && magic[3] == '1'
                   && std::fread (hdr, 4, 2, f) == 2;
         if (ok)
         {
+            pad = magic[2] == 'P';
             sr = (int) hdr[0];
             zones.resize (hdr[1]);
             for (auto& z : zones)
@@ -61,8 +63,12 @@ struct SampleSet
                 z.root = b[0]; z.vel = b[1]; z.rr = b[2]; z.ch = std::max (1, (int) b[3]); z.kind = b[4];
                 {   // 18 bits : fin de la partie tenue ; 6 bits : glissé d'entrée (pas de 10 ms)
                     const int packed = (int) b[5] | ((int) b[6] << 8) | ((int) b[7] << 16);
-                    z.relPos = packed & 0x3FFFF;
-                    z.attackPos = (packed >> 18) * (int) (hdr[0] / 100);
+                    if (pad) z.relPos = packed;   // prise par tonalité : début de boucle (choisi à la fabrication)
+                    else
+                    {
+                        z.relPos = packed & 0x3FFFF;
+                        z.attackPos = (packed >> 18) * (int) (hdr[0] / 100);
+                    }
                 }
                 z.frames = (int) len;
                 z.pcm.resize ((size_t) len * (size_t) z.ch);
@@ -130,6 +136,13 @@ private:
             }
         }
         if (z.kind != 0) return;
+        if (pad)
+        {   // prise par tonalité : boucle sur les 70 % finaux de la prise (le fondu enchaîné est déjà dans le fichier)
+            z.loopStart = z.relPos > 0 && z.relPos < z.frames - sr ? z.relPos : (int) (0.3 * z.frames);
+            z.loopEnd = z.frames - sr / 20;
+            z.xfade = 0;
+            return;
+        }
         // boucle : la dernière seconde avant le fondu final, longueur = nombre entier de périodes
         const double f0 = 440.0 * std::pow (2.0, (z.root - 69) / 12.0);
         const int period = (int) std::lround (sr / f0);

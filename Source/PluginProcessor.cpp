@@ -36,6 +36,7 @@ APVTS::ParameterLayout DGuitarProcessor::createLayout()
     layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "pattern", 1 }, "Rythme", pats, 0));
     layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "patspeed", 1 }, "Vitesse du rythme", juce::StringArray { "x1/2", "x1", "x2" }, 1));
     layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "humanize", 1 }, "Humaniser", juce::NormalisableRange<float> (0.0f, 1.0f), 0.35f));
+    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "noises", 1 }, "Bruits de doigts", true));
     layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "pitchbend", 1 }, "Pitch Bend", juce::NormalisableRange<float> (-1.0f, 1.0f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "mod", 1 }, "Modulation", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f, pct));
     return layout;
@@ -53,6 +54,7 @@ DGuitarProcessor::DGuitarProcessor()
     pPattern = apvts.getRawParameterValue ("pattern");
     pPatSpeed = apvts.getRawParameterValue ("patspeed");
     pHuman = apvts.getRawParameterValue ("humanize");
+    pNoises = apvts.getRawParameterValue ("noises");
     sink.e = &engine;
 }
 
@@ -85,6 +87,7 @@ int DGuitarProcessor::wantedSet() const
 
 int DGuitarProcessor::getPatSpeed() const { return juce::jlimit (0, 2, juce::roundToInt (pPatSpeed->load())); }
 float DGuitarProcessor::getHuman() const { return pHuman->load(); }
+bool DGuitarProcessor::getNoises() const { return pNoises->load() > 0.5f; }
 void DGuitarProcessor::setParamValue (const char* id, float v)
 {
     if (auto* q = apvts.getParameter (id))
@@ -139,6 +142,7 @@ void DGuitarProcessor::selectGuitar (int index)
     set ("preset", 0.0f);
     for (int i = 0; i < dguitar::kNumKnobs; ++i) set (kKnobIds[i], d.preset[0][i] / 100.0f);
     set ("pattern", (float) presetPattern (index, 0));
+    if (index == 3 || index == 4) set ("noises", index == 3 ? 1.0f : 0.0f);   // ACOUSTIC : avec ; BLACK : sans (par défaut)
 }
 
 void DGuitarProcessor::selectPreset (int index)
@@ -183,7 +187,7 @@ void DGuitarProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     applySettings();
     engine.setSamples (bank.audioFetch (wantedSet()));
     engineSamples.store (engine.usingSamples());
-    engine.releaseNoises = false;
+    engine.releaseNoises = getNoises() && ! player.active();   // bruits de doigts (bouton BRUITS DOIGTS), coupés pendant les rythmes comme en 1.5
     {
         const int pat = getPattern();
         if (pat != player.pattern())

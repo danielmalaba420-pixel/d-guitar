@@ -61,6 +61,7 @@ public:
     int getPattern() const;
     int getPatSpeed() const;
     float getHuman() const;
+    bool getNoises() const;
     void setParamValue (const char* id, float v);
     void setPattern (int p);
     int patternSteps() const { return player.numSteps(); }
@@ -89,6 +90,7 @@ private:
     std::atomic<float>* pPattern = nullptr;
     std::atomic<float>* pPatSpeed = nullptr;
     std::atomic<float>* pHuman = nullptr;
+    std::atomic<float>* pNoises = nullptr;
     std::atomic<float>* pGuitar = nullptr;
     std::atomic<float>* pPreset = nullptr;
     std::atomic<float>* pKnob[dguitar::kNumKnobs] {};

@@ -339,6 +339,7 @@ struct StringVoice
     float damp = 1.0f, sgain = 1.0f, relEnv = 1.0f, relK = 1.0f, susRef = 0.0f, susG = 1.0f;
     bool  oneShot = false;      // bruit de relâchement : joué tel quel
     bool  noLoop = false;       // (CRY) note relâchée : on quitte la boucle et on joue la queue naturelle de la prise
+    float padFadeT = 0, padFadeLen = 0; bool padSine = false;   // (CRY) fondus à puissance constante entre tonalités
     bool active = false, gate = false, releasing = false, held = false;
     int note = -1;
     uint32_t age = 0;
@@ -367,7 +368,7 @@ struct StringVoice
     void init() { R.init (kLine); Lc.init (kLine); }
     void clear()
     {
-        zone = nullptr; spos = 0; relEnv = 1; damp = 1; rt[0] = rt[1] = rt[2] = rt[3] = 0; rtA = 1; susG = 1; oneShot = false; noLoop = false; R.clear(); Lc.clear(); lp1 = 0; ax1[0] = ax1[1] = ay1[0] = ay1[1] = 0; prevA = prevB = 0; env = 0; excN = excLen = 0; sq.reset();
+        zone = nullptr; spos = 0; relEnv = 1; damp = 1; rt[0] = rt[1] = rt[2] = rt[3] = 0; rtA = 1; susG = 1; oneShot = false; noLoop = false; padFadeT = padFadeLen = 0; padSine = false; R.clear(); Lc.clear(); lp1 = 0; ax1[0] = ax1[1] = ay1[0] = ay1[1] = 0; prevA = prevB = 0; env = 0; excN = excLen = 0; sq.reset();
     }
 };
 
@@ -415,6 +416,7 @@ public:
         V = &voicing (g);
         for (auto& v : voices) { v.clear(); v.active = false; v.gate = false; }
         held.clear(); pending.clear();
+        for (int& h : padHeld) h = 0;
         configure();
     }
 
@@ -432,6 +434,7 @@ public:
         samples = s;
         for (auto& v : voices) { v.clear(); v.active = false; v.gate = false; }
         held.clear(); pending.clear();
+        for (int& h : padHeld) h = 0;
         configure();
     }
     bool usingSamples() const
@@ -490,6 +493,7 @@ public:
 
     void noteOff (int note)
     {
+        if (V->samples == 4 && usingSamples()) { padNoteOff (note); return; }
         // note encore en attente d'étalement : on l'annule
         for (size_t i = 0; i < pending.size(); ++i) if (pending[i].note == note) { pending.erase (pending.begin() + (long) i); return; }
         if (V->mono)
@@ -526,6 +530,7 @@ public:
     void allNotesOff()
     {
         pending.clear(); held.clear();
+        for (int& h : padHeld) h = 0;
         for (auto& v : voices) if (v.active && v.gate) releaseVoice (v);
     }
 
@@ -594,7 +599,9 @@ private:
     float compEnv = 0, compGain = 1, compAtt = 0.01f, compRel = 0.0001f;
     float wahEnv = 0, wahPos = 0, wahAmt = 0, wahPosSm = 0;
     float preGain = 1, gain2 = 1, stageBias = 0.1f, postGain = 1, outGain = 1;
-    float glideMsNow = 0.0f, slideSat = 6.0f;   // CRY : vitesse du glissé (3ᵉ potard), chaleur de lampe (DRIVE)
+    float glideMsNow = 0.0f, slideSat = 6.0f;
+    float padXfade = 2.0f;            // CRY : fondu enchaîné entre deux tonalités (s), 3ᵉ potard FONDU
+    int padHeld[12] = {};   // CRY : vitesse du glissé (3ᵉ potard), chaleur de lampe (DRIVE)
     float limiter = 1.0f;
     Line chL, chR, dlA, dlB;
     OnePole dlFbA, dlFbB, dlHpA, dlHpB;
@@ -661,7 +668,8 @@ private:
 
         wahAmt = (v.shimmerKnob || v.glideKnob) ? 0.0f : clampf (st.wah, 0, 1);   // WORSHIP : ce potard règle le shimmer ; CRY : le glissé
         glideMsNow = v.glideKnob ? lerpf (25.0f, 420.0f, std::pow (clampf (st.wah, 0, 1), 1.4f)) : v.glideMs;
-        slideSat = 6.0f + 90.0f * d * d;
+        padXfade = lerpf (0.1f, 8.0f, std::pow (clampf (st.wah, 0, 1), 2.0f));
+        slideSat = 0.01f + 90.0f * d * d;   // DRIVE à 0 : la prise passe intacte
         roundK = lerpf (1.15f, 3.2f, clampf (st.tone, 0.0f, 1.0f));
         brightK = 0.6f + 0.9f * wahAmt;
         if (v.acoustic)
@@ -685,7 +693,7 @@ private:
             sideTone[0].lowShelf (180.0f, -tn * 5.0f, sr);
             sideTone[1].highShelf (2600.0f, tn * 14.0f, sr);
         }
-        if (v.samples == 3)
+        if (v.samples >= 3)
         {
             sideTone[0].lowShelf (180.0f, -tn * 5.0f, sr);
             sideTone[1].highShelf (2600.0f, tn * 14.0f, sr);
@@ -766,6 +774,50 @@ private:
         v.gate = false; v.releasing = true; v.held = false; v.releaseT = xf * 2.2f; v.noLoop = true;
     }
 
+    // ---- CRY : une prise entière par tonalité (comme les pads par tonalité) ----------------------------
+    // n'importe quel Do joue ta prise en Do ; une seule tonalité à la fois : changer de touche = fondu enchaîné
+    void padNoteOn (int note, float vel)
+    {
+        const int pc = ((note % 12) + 12) % 12;
+        ++padHeld[pc];
+        bool any = false;
+        for (auto& v : voices)
+            if (v.active && v.zone != nullptr)
+            {
+                if (v.gate && (v.note % 12) == pc) { v.held = false; return; }          // cette tonalité joue déjà
+                const float len = padXfade * sr;
+                if (v.padFadeLen <= 0.0f || v.padFadeLen - v.padFadeT > len) { v.padFadeT = 0.0f; v.padFadeLen = len; }
+                v.gate = false; v.held = false;
+                any = true;
+            }
+        StringVoice* nv = allocVoice();
+        if (nv == nullptr) return;
+        nv->clear();
+        nv->active = true; nv->gate = true; nv->releasing = false; nv->held = false;
+        nv->note = 60 + pc; nv->age = ++ageCounter; nv->vel = vel;
+        const SampleZone* z = samples->pick (60 + pc, 1.0f, rrCount++);
+        if (z == nullptr) { nv->active = false; return; }
+        nv->zone = z; nv->spos = 0.0; nv->oneShot = false;
+        nv->relEnv = 1.0f; nv->susG = 1.0f; nv->damp = 1.0f;
+        nv->sgain = kSampleGain * (0.55f + 0.45f * clampf (vel, 0.0f, 1.0f));
+        nv->curSemi = nv->tgtSemi = (float) z->root; nv->glideK = 1.0f;
+        nv->rate = (double) samples->sr / sr;
+        nv->swellT = 0.0f; nv->swellLen = (any ? padXfade : 0.012f) * sr; nv->padSine = any;
+        nv->hop = 0; nv->life = 0;
+    }
+    void padNoteOff (int note)
+    {
+        const int pc = ((note % 12) + 12) % 12;
+        padHeld[pc] = std::max (0, padHeld[pc] - 1);
+        if (padHeld[pc] > 0) return;
+        for (auto& v : voices)
+            if (v.active && v.gate && (v.note % 12) == pc)
+            {
+                if (sustainDown) { v.held = true; continue; }
+                v.gate = false; v.held = false; v.padFadeT = 0.0f; v.padFadeLen = V->releaseMs * 0.001f * sr;
+            }
+    }
+
     void quickKill (StringVoice& v, float seconds)
     {
         v.gate = false; v.releasing = true; v.held = false; v.releaseT = seconds;
@@ -803,6 +855,7 @@ private:
         const int si = stringOf (note);
         viz[(size_t) si].store (std::max (viz[(size_t) si].load(), 9.0f * (0.6f + 0.4f * vel)));
 
+        if (V->samples == 4 && usingSamples()) { padNoteOn (note, vel); return; }
         bool cryPoly = false;
         if (V->mono && V->samples == 3 && usingSamples())
         {   // CRY : une note seule liée à la précédente = glissé du bottleneck ; plusieurs touches ensemble = accord
@@ -1128,7 +1181,7 @@ private:
                 }
             }
         }
-        const bool loops = (V->sustainer > 0.0f || V->samples == 3) && z.loopEnd > 0 && ! v.oneShot && ! v.noLoop;   // CRY : la note tient, sans écraser la dynamique de ta prise
+        const bool loops = (V->sustainer > 0.0f || V->samples >= 3) && z.loopEnd > 0 && ! v.oneShot && ! v.noLoop;   // CRY : la note tient, sans écraser la dynamique de ta prise
         if (loops && v.spos >= z.loopEnd) v.spos -= (double) (z.loopEnd - z.loopStart);
         if (v.spos >= (double) (z.frames - 3)) { v.active = false; return 0.0f; }
 
@@ -1174,8 +1227,15 @@ private:
         if (v.swellLen > 0.0f)
         {
             const float s = std::min (1.0f, v.swellT / v.swellLen);
-            g *= s * s * (3.0f - 2.0f * s);
+            g *= v.padSine ? std::sin (s * 1.5707963f) : s * s * (3.0f - 2.0f * s);
             v.swellT += 1.0f;
+        }
+        if (v.padFadeLen > 0.0f)
+        {   // CRY : fondu de sortie à puissance constante (changement de tonalité, touche lâchée)
+            const float s = std::min (1.0f, v.padFadeT / v.padFadeLen);
+            g *= std::cos (s * 1.5707963f);
+            v.padFadeT += 1.0f;
+            if (s >= 1.0f) { v.active = false; return 0.0f; }
         }
         ++v.life;
         if (V->roundTone && ! v.oneShot)
@@ -1345,7 +1405,7 @@ private:
                 sideBuf[i] = sd * g;
             }
         }
-        else if (v.samples == 3 && usingSamples())
+        else if (v.samples >= 3 && usingSamples())
         {   // CRY : tes prises de slide (avec leurs effets) : on garde la stéréo ; DRIVE = chaleur de lampe douce, TONE = couleur
             const float g = postGain * kAmpOut * 3.0f, k = slideSat;
             for (int i = 0; i < n; ++i)

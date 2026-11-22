@@ -22,6 +22,7 @@ const Rectangle<float> kPatPrev (190.0f, 620.0f, 26.0f, 24.0f);
 const Rectangle<float> kPatNext (458.0f, 620.0f, 26.0f, 24.0f);
 const Rectangle<float> kPatSpeed (500.0f, 597.0f, 140.0f, 17.0f);
 const Rectangle<float> kPatHuman (650.0f, 597.0f, 150.0f, 17.0f);
+const Rectangle<float> kNoises (830.0f, 597.0f, 196.0f, 22.0f);   // bouton BRUITS DOIGTS (ACOUSTIC, BLACK)
 const int kOpen[6] = { 40, 45, 50, 55, 59, 64 };
 
 Image loadImg (const void* d, int n) { return ImageFileFormat::loadFrom (d, (size_t) n); }
@@ -162,7 +163,7 @@ void DGuitarEditor::buildStatic (float ps)
     g.setGradientFill (ColourGradient (Colour (0xffc9622a), 1410.0f, 856.0f, Colour (0x00c9622a), 960.0f, 856.0f, false));
     g.fillRect (960.0f, 856.0f, 450.0f, 1.0f);
     spaced (g, "D-GUITAR", { 640.0f, 836.0f, 320.0f, 40.0f }, Justification::centred, font (32.0f, 2).withExtraKerningFactor (0.34f), Colour (0xffe9dfd3));
-    spaced (g, String::fromUTF8 ("AU \xc2\xb7 VST3 \xc2\xb7 v1.6"), { 1340.0f, 836.0f, 216.0f, 40.0f }, Justification::right, font (14.0f, 1).withExtraKerningFactor (0.18f), kDim);
+    spaced (g, String::fromUTF8 ("AU \xc2\xb7 VST3 \xc2\xb7 v1.6.1"), { 1340.0f, 836.0f, 216.0f, 40.0f }, Justification::right, font (14.0f, 1).withExtraKerningFactor (0.18f), kDim);
 }
 
 //==============================================================================
@@ -315,6 +316,16 @@ void DGuitarEditor::drawPattern (Graphics& g)
             ++k;
         }
     }
+    if (proc.getGuitar() == 3 || proc.getGuitar() == 4)
+    {   // bruits de doigts (les doigts qui quittent les cordes) : ON / OFF
+        const bool on = proc.getNoises();
+        g.setColour (Colour (0xd8120e0b));
+        g.fillRoundedRectangle (kNoises, 6.0f);
+        g.setColour (on ? kAccent.withAlpha (0.7f) : kLine);
+        g.drawRoundedRectangle (kNoises, 6.0f, 1.0f);
+        spaced (g, on ? "BRUITS DOIGTS : ON" : "BRUITS DOIGTS : OFF", kNoises, Justification::centred,
+                font (10.5f, 3).withExtraKerningFactor (0.14f), on ? Colour (0xffe0c9a8) : Colour (0xff8a7d70));
+    }
     spaced (g, pat > 0 ? "TIENS UN ACCORD" : "JEU NOTE PAR NOTE", { 300.0f, 600.0f, 184.0f, 14.0f }, Justification::right,
             font (10.0f, 3).withExtraKerningFactor (0.12f), Colour (0xff6f655b));
     for (auto r : { kPatPrev, kPatNext })
@@ -441,7 +452,7 @@ void DGuitarEditor::paint (Graphics& g)
         String lab = kLabels[i];
         if ((cur == 3 || cur == 4) && i < 3) lab = kLabelsAc[i];
         if (cur == 2 && i == 2) lab = "SHIMMER";
-        if (cur == 5 && i == 2) lab = String::fromUTF8 ("GLISS\xc3\x89");
+        if (cur == 5 && i == 2) lab = "FONDU";
         spaced (g, lab, a.withHeight (18.0f), Justification::centred, font (15.0f, 1).withExtraKerningFactor (0.18f), Colour (0xffc9a98c));
         drawKnob (g, i, a.getCentreX(), a.getY() + 18.0f + 6.0f + 50.0f);
     }
@@ -544,6 +555,7 @@ void DGuitarEditor::mouseDown (const MouseEvent& e)
     if (kPatPrev.expanded (4.0f).contains (p)) { proc.setPattern (proc.getPattern() - 1); return; }
     if (kPatNext.expanded (4.0f).contains (p)) { proc.setPattern (proc.getPattern() + 1); return; }
     if (kPatSpeed.contains (p)) { proc.setParamValue ("patspeed", (float) ((proc.getPatSpeed() + 1) % 3)); repaint(); return; }
+    if ((proc.getGuitar() == 3 || proc.getGuitar() == 4) && kNoises.contains (p)) { proc.setParamValue ("noises", proc.getNoises() ? 0.0f : 1.0f); repaint(); return; }
     if (kPatHuman.contains (p))
     {   // 0 -> 25 -> 50 -> 75 -> 100 % -> 0
         const int step = (roundToInt (proc.getHuman() * 4.0f) + 1) % 5;

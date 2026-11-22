@@ -25,7 +25,7 @@ int main()
             static SampleSet sets[10];
             if (const char* dir = std::getenv ("SAMPLES"))
             {
-                const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? "steel" : (gi == 4 ? "steel1" : (gi == 5 ? "slide-angelitus" : nullptr)));
+                const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? "steel" : (gi == 4 ? "steel1" : (gi == 5 ? "pad-angelitus" : nullptr)));
                 if (nm != nullptr && (sets[gi].name == nm || (sets[gi].load (std::string (dir) + "/" + nm + ".dgs") && ! (sets[gi].name = nm).empty()))) e.setSamples (&sets[gi]);
             }
             const int per = sr; const int total = per * 6; double acc = 0; long cnt = 0;

@@ -61,7 +61,7 @@ int main (int argc, char** argv)
     static SampleSet set;
     if (const char* dir = std::getenv ("SAMPLES"))
     {
-        const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? (pi == 1 ? "finger" : (pi == 2 ? "nylon" : "steel")) : (gi == 4 ? "steel1" : (gi == 5 ? (pi == 1 ? "slide-piratas" : (pi == 2 ? "slide-ratones" : "slide-angelitus")) : nullptr)));
+        const char* nm = gi == 1 || gi == 2 ? "electric-di" : (gi == 3 ? (pi == 1 ? "finger" : (pi == 2 ? "nylon" : "steel")) : (gi == 4 ? "steel1" : (gi == 5 ? (pi == 1 ? "pad-piratas" : (pi == 2 ? "pad-ratones" : "pad-angelitus")) : nullptr)));
         if (nm != nullptr && set.load (std::string (dir) + "/" + nm + ".dgs")) { set.name = nm; e.setSamples (&set); }
         std::fprintf (stderr, "samples %s : %s\n", nm ? nm : "-", e.usingSamples() ? "OK" : "non");
     }
@@ -203,7 +203,7 @@ int main (int argc, char** argv)
     Player pl; pl.prepare (sr);
     struct S : Player::Sink { Engine* e; double* t = nullptr; void strike (int n, float v) override { if (std::getenv ("TRACE")) std::printf ("%.3f %d %.2f\n", *t, n, v); e->strike (n, v); } void release (int n) override { e->noteOff (n); } void strikeSoft (int n, float v, float ms) override { e->strikeSoft (n, v, ms); } void scrape (float v, bool u, float ms) override { if (! std::getenv ("NOSCRAPE")) e->scrape (v, u, ms); } } sk; sk.e = &e; double tnow = 0; sk.t = &tnow;
     const int patN = std::getenv ("PAT") ? std::atoi (std::getenv ("PAT")) : 0;
-    pl.setPattern (patN); e.releaseNoises = false; pl.setSpeed (std::getenv ("SPEED") ? std::atof (std::getenv ("SPEED")) : 1.0); pl.setHuman (std::getenv ("HUMAN") ? (float) std::atof (std::getenv ("HUMAN")) : 0.35f); pl.setTempo (std::getenv ("BPM") ? std::atof (std::getenv ("BPM")) : 90.0);
+    pl.setPattern (patN); e.releaseNoises = std::getenv ("RN") != nullptr; pl.setSpeed (std::getenv ("SPEED") ? std::atof (std::getenv ("SPEED")) : 1.0); pl.setHuman (std::getenv ("HUMAN") ? (float) std::atof (std::getenv ("HUMAN")) : 0.35f); pl.setTempo (std::getenv ("BPM") ? std::atof (std::getenv ("BPM")) : 90.0);
     size_t ei = 0; int pos = 0; const int blk = patN > 0 ? 32 : 128;
     while (pos < total)
     {
